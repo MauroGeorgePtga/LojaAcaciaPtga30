@@ -548,11 +548,10 @@ const gerarDocx = async (tipo, eleicao, chapas, presencas, dadosLoja, irmaos, hi
       subtitulo: interpolarModelo(modelo.subtitulo || '', VARS).replace(/\*/g, '').split('\n').filter(l => l.trim() !== ''),
       paragrafos: [
         ...interpolarModelo(modelo.corpo || '', VARS).split('\n'),
-        '',
-        `${VARS.cidade} – ${VARS.estado}, ${VARS.data_edital_eleicao}.`,
       ],
       assinaturas: [{ nome: vmConvocante?.nome || '[VM Sainte]', cargo: modelo.assinatura_1_cargo || 'Venerável Mestre' }],
       dadosLoja, numeroEdital: `${eleicao.edital_eleicao_numero || ''}/${eleicao.edital_eleicao_ano || ''}`,
+      dataEdital: eleicao.data_edital_eleicao || '',
     };
   }
 
