@@ -554,6 +554,7 @@ export const gerarAtaSessao = async ({ balaustre, modeloId = null, documento = '
         : [[VARS.vm_nome, modelo.assinatura_1_cargo || 'Venerável Mestre'], [VARS.orador_nome, modelo.assinatura_2_cargo || 'Orador'], [VARS.secretario_nome, modelo.assinatura_3_cargo || 'Secretário']]
       ).map(([nome, cargo]) => ({ nome, cargo })),
       dadosLoja, numeroEdital: VARS.numero_edital || '', periodo: VARS.periodo_glemt_barra || '',
+      dataEdital: (editalReg && editalReg.data_edital) || balaustre.eleicao_glemt?.data_edital || '',
       mostrarLogo: !!modelo.mostrar_logo, cabecalhoTexto: modelo.cabecalho_texto,
     };
   }
