@@ -90,6 +90,21 @@ export const gerarEditalAptosPDF = async ({ balaustre = null, conteudo = null, a
     y += colado ? 0 : 3.4;
   });
 
+  // ── Cidade e data do edital (antes da assinatura) ──────────────────────
+  const MESES_PDF = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const dataEditalExtenso = (() => {
+    const d = String(ed.dataEdital || ed.data_edital || '').substring(0, 10);
+    if (!d) return '';
+    const [a, m, di] = d.split('-').map(Number);
+    return `${String(di).padStart(2, '0')} de ${MESES_PDF[m - 1]} de ${a}`;
+  })();
+  if (dataEditalExtenso || dadosLoja.cidade) {
+    y += 10;
+    if (y > H - 40) novaPagina();
+    doc.setFont('times', 'normal'); doc.setFontSize(11.5); doc.setTextColor(...TEXTO);
+    doc.text(pdfTexto(`${dadosLoja.cidade || 'Paranatinga'} – ${dadosLoja.estado || 'MT'}${dataEditalExtenso ? `, ${dataEditalExtenso}` : ''}.`), W / 2, y, { align: 'center' });
+  }
+
   // ── Assinaturas do edital ──────────────────────────────────────────────
   y += 14;
   if (y > H - 40) novaPagina();
