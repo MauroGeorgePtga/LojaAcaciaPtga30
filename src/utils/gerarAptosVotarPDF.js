@@ -161,7 +161,7 @@ export const gerarAptosVotarPDF = ({ linhas, linhasInaptos = [], eleicao, dadosL
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...CINZA);
-    doc.text(`Emitido em ${new Date().toLocaleDateString('pt-BR')}`, M, H - 9);
+    // (a data de emissão foi retirada do rodapé a pedido)
     doc.text(`${p} de ${total}`, W - M, H - 9, { align: 'right' });
   }
   // Baixa o arquivo direto (o clique gera o PDF na hora, sem esperar o banco)
