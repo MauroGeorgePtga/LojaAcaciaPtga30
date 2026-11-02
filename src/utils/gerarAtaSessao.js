@@ -560,7 +560,7 @@ export const gerarAtaSessao = async ({ balaustre, modeloId = null, documento = '
 
   // Assinaturas dos Escrutinadores (lado a lado), inseridas após a do Venerável Mestre
   const escrutinadoresAssinatura = [
-    ...((ehEleicao && (balaustre.eleicao_glemt?.escrutinadores_assinam ?? true)
+    ...((ehEleicao && !ehEdital && (balaustre.eleicao_glemt?.escrutinadores_assinam ?? true)
          && (balaustre.eleicao_glemt?.escrutinador1_id || balaustre.eleicao_glemt?.escrutinador2_id))
       ? (() => {
           // Dois Escrutinadores na MESMA linha, em tabulações centralizadas (igual ao modelo em Word)
@@ -606,7 +606,15 @@ export const gerarAtaSessao = async ({ balaustre, modeloId = null, documento = '
     })(),
     ...paragrafos,
     // Edital: cidade e data do edital
-    ...(ehEdital ? [par([ar(`${VARS.cidade}-${VARS.estado}, ${VARS.data_edital_extenso || ''}.`)], { align: AlignmentType.CENTER, before: 360, after: 0 })] : []),
+    ...(ehEdital ? [par([ar(`${VARS.cidade} – ${VARS.estado}, ${
+      VARS.data_edital_extenso
+      || (() => {   // sem registro em Editais, usa a data da aba Configuração
+        const d = String(balaustre.eleicao_glemt?.data_edital || '').substring(0, 10);
+        if (!d) return '';
+        const [a, m, di] = d.split('-').map(Number);
+        return `${String(di).padStart(2, '0')} de ${MESES[m - 1]} de ${a}`;
+      })()
+    }.`)], { align: AlignmentType.CENTER, before: 360, after: 0 })] : []),
     // Assinaturas (centralizadas): ata = VM, Orador e Secretário; edital = só o VM
     // Escrutinadores assinam a ata da eleição quando o marcador estiver ligado (padrão: ligado)
     // Cargos das assinaturas vêm do modelo (aba Assinaturas); vazio = padrão
