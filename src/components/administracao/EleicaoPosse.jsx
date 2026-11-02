@@ -1525,7 +1525,9 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
         }
         eleicaoDoc = { ...eleicaoSelecionada,
           [posse ? 'edital_posse_numero' : 'edital_eleicao_numero']: ed.numero,
-          [posse ? 'edital_posse_ano' : 'edital_eleicao_ano']: ed.ano };
+          [posse ? 'edital_posse_ano' : 'edital_eleicao_ano']: ed.ano,
+          // cidade e data saem do edital quando a Configuração não tem data
+          [posse ? 'data_edital_posse' : 'data_edital_eleicao']: dCfg || ed.data_edital };
       }
       const buf = await gerarDocx(tipo, eleicaoDoc, chapas, presencas, dadosLoja, irmaos || [], historicoSituacoes, balaustresEleicao, modeloEscolhido, comLista);
       downloadDocx(buf, nomeArq);
