@@ -33,6 +33,21 @@ const anoPadraoEdital = (eleicao, posse) => {
 const anoDoEdital = (eleicao, posse) => Number(posse ? eleicao?.edital_posse_ano : eleicao?.edital_eleicao_ano) || anoPadraoEdital(eleicao, posse);
 const formatarNumeroEdital = (n, ano) => (n ? `${String(n).padStart(2, '0')}/${ano}` : '');
 
+// Rótulo acentuado dos cargos (o valor gravado no banco continua sem acento)
+const ROTULO_CARGO = {
+  'Veneravel Mestre': 'Venerável Mestre',
+  'Secretario': 'Secretário',
+  'Mestre de Cerimonia': 'Mestre de Cerimônia',
+  'Mestre de Cerimonia Adjunto': 'Mestre de Cerimônia Adjunto',
+  '1 Experto': '1º Experto',
+  '2 Experto': '2º Experto',
+  '1 Diácono': '1º Diácono',
+  '2 Diácono': '2º Diácono',
+  'Bibliotecario': 'Bibliotecário',
+};
+const rotuloCargo = (c) => ROTULO_CARGO[c] || String(c || '')
+  .replace(/^1 /, '1º ').replace(/^2 /, '2º ');
+
 // Número por extenso (até 999), para as variáveis de quantidade
 const UNID_EXT = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze',
   'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte'];
@@ -2278,7 +2293,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
                   const dup = outros.length > 0;
                   return (
                   <div key={cargo} style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '0.5rem', alignItems: 'center' }}>
-                    <label style={{ ...S.label, margin: 0, color: dup ? '#ef4444' : S.label.color }}>{cargo}</label>
+                    <label style={{ ...S.label, margin: 0, color: dup ? '#ef4444' : S.label.color }}>{rotuloCargo(cargo)}</label>
                     <div>
                       <select style={{ ...S.select, ...(dup ? { border: '2px solid #ef4444', background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontWeight: 700 } : {}) }}
                         value={id || ''}
@@ -2286,7 +2301,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
                         <option value="">— sem designação —</option>
                         {irmaosAtivos.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
                       </select>
-                      {dup && <div style={{ fontSize: '0.7rem', color: '#ef4444', marginTop: '0.2rem' }}>Também em: {outros.join(', ')}</div>}
+                      {dup && <div style={{ fontSize: '0.7rem', color: '#ef4444', marginTop: '0.2rem' }}>Também em: {outros.map(rotuloCargo).join(', ')}</div>}
                     </div>
                   </div>
                   );
@@ -2303,7 +2318,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
                     const i = irmaosAtivos.find(x => x.id === c.irmao_id) || irmaos?.find(x => x.id === c.irmao_id);
                     return (
                       <div key={c.id} style={{ display: 'flex', gap: '1rem', padding: '0.4rem 0.75rem', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)' }}>
-                        <span style={{ fontWeight: '600', color: 'var(--color-accent)', minWidth: '180px', fontSize: '0.8rem' }}>{c.cargo}</span>
+                        <span style={{ fontWeight: '600', color: 'var(--color-accent)', minWidth: '180px', fontSize: '0.8rem' }}>{rotuloCargo(c.cargo)}</span>
                         <span style={{ color: 'var(--color-text)', fontSize: '0.875rem' }}>{i?.nome || '[Não encontrado]'}</span>
                       </div>
                     );
