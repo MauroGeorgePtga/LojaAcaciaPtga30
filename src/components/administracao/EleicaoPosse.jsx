@@ -17,6 +17,7 @@ import { CARGOS_ADMINISTRATIVOS } from '../../utils/constants';
 import { gerarQuadroGestaoPDF } from '../../utils/gerarQuadroGestaoPDF';
 import { cabecalhoLojaDocx, linhasCabecalho } from '../../utils/cabecalhoLoja';
 import { gerarAptosVotarPDF } from '../../utils/gerarAptosVotarPDF';
+import { calcularAptidaoVoto } from '../../utils/calcularAptidaoVoto';
 import { emitirEdital } from '../../utils/editais';
 import { gerarEditalAptosPDF } from '../../utils/gerarEditalAptosPDF';
 import VincularEdital from '../editais/VincularEdital';
@@ -31,6 +32,21 @@ const anoPadraoEdital = (eleicao, posse) => {
 };
 const anoDoEdital = (eleicao, posse) => Number(posse ? eleicao?.edital_posse_ano : eleicao?.edital_eleicao_ano) || anoPadraoEdital(eleicao, posse);
 const formatarNumeroEdital = (n, ano) => (n ? `${String(n).padStart(2, '0')}/${ano}` : '');
+
+// Número por extenso (até 999), para as variáveis de quantidade
+const UNID_EXT = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove', 'dez', 'onze', 'doze', 'treze',
+  'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove', 'vinte'];
+const DEZ_EXT = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+const CENT_EXT = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+const numeroPorExtenso = (valor) => {
+  const n = Math.trunc(Number(valor) || 0);
+  if (n <= 0) return 'zero';
+  if (n <= 20) return UNID_EXT[n];
+  if (n < 100) { const d = Math.floor(n / 10), u = n % 10; return u ? `${DEZ_EXT[d]} e ${UNID_EXT[u]}` : DEZ_EXT[d]; }
+  if (n === 100) return 'cem';
+  if (n < 1000) { const c = Math.floor(n / 100), r = n % 100; return r ? `${CENT_EXT[c]} e ${numeroPorExtenso(r)}` : CENT_EXT[c]; }
+  return String(n);
+};
 
 const formatarData = (d) => {
   if (!d) return '';
@@ -187,6 +203,21 @@ const calcularQuorum = (irmaos, eleicao, presencas, historico = []) => {
 const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, irmaos, historico = [], balaustresEl = [], modeloEscolhido = null, comLista = false, dataEmissao = null) => {
   // Garantia: se o número/data do edital não vieram prontos, busca pelo vínculo em Editais
   let eleicao = eleicaoRecebida;
+  // Mestres aptos a votar: o cálculo automático com os ajustes manuais da eleição
+  // (quem estava inapto e foi marcado como apto entra na conta)
+  let aptosDaEleicao = 0;
+  try {
+    const refApt = String(eleicaoRecebida?.data_eleicao || new Date().toISOString()).substring(0, 10);
+    const iniApt = (() => { const d = new Date(`${refApt}T00:00:00`); d.setFullYear(d.getFullYear() - 1); return d.toISOString().substring(0, 10); })();
+    const linhasApt = await calcularAptidaoVoto({
+      ref: refApt, ini: iniApt, irmaos: irmaos || [],
+      ajustes: eleicaoRecebida?.aptidao_ajustes || {},   // inapto → apto entra na conta
+    });
+    aptosDaEleicao = (linhasApt || []).filter(l => l.apto).length;
+  } catch (e) {
+    aptosDaEleicao = 0;
+  }
+
   const TIPOS_COM_EDITAL = ['edital_eleicao', 'edital_posse', 'ata_eleicao_loja', 'ata_eleicao_cartorio', 'ata_posse', 'ata_posse_cartorio'];
   if (TIPOS_COM_EDITAL.includes(tipo)) {
     const posse = tipo === 'edital_posse' || tipo === 'ata_posse' || tipo === 'ata_posse_cartorio';
@@ -407,6 +438,9 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
     secretario_eleito_dados:  secretarioEleito ? dadoIrmao(secretarioEleito.irmao_id) : '[Secretário Eleito]',
     num_votantes:             String(eleicao.num_votantes_eleicao || presEleicaoLen),
     total_mestres:            String(calcularQuorum(irmaos, eleicao, presencas, historico).totalMestres),
+    // Mestres aptos a votar, já com os ajustes manuais (inapto → apto) desta eleição
+    total_mestres_aptos:      String(aptosDaEleicao),
+    total_mestres_aptos_extenso: numeroPorExtenso(aptosDaEleicao),
     quorum_minimo:            String(calcularQuorum(irmaos, eleicao, presencas, historico).quorumMinimo),
     trecho_votacao:           '', // preenchido logo abaixo, já com as variáveis
     cnpj:                     dadosLoja.cnpj || '[CNPJ]',
