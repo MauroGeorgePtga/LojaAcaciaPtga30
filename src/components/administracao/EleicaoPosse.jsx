@@ -993,8 +993,9 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   // Editais vinculados à eleição selecionada (id → registro da tabela editais)
   const [editaisLoja, setEditaisLoja] = useState({});
   const [emitindoEdital, setEmitindoEdital] = useState('');
-  const [vinculandoEdital, setVinculandoEdital] = useState('');
-  const [dataEmissaoQuadro, setDataEmissaoQuadro] = useState(() => new Date().toISOString().substring(0, 10)); // '' | 'eleicao' | 'posse'
+  const [vinculandoEdital, setVinculandoEdital] = useState(''); // '' | 'eleicao' | 'posse'
+  // Data de emissão do Quadro da Gestão / Apresentação da Chapa (sai acima da assinatura)
+  const [dataEmissaoQuadro, setDataEmissaoQuadro] = useState(() => new Date().toISOString().substring(0, 10));
   const recarregarEditaisLoja = useCallback(async (el) => {
     const ids = [el?.edital_eleicao_id, el?.edital_posse_id].filter(Boolean);
     if (!ids.length) { setEditaisLoja({}); return; }
