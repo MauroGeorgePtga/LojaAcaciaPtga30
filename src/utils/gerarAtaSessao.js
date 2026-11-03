@@ -4,6 +4,7 @@ import {
 import { supabase } from '../supabaseClient';
 import { LOGO_LOJA_B64 } from './logoLoja';
 import { cabecalhoLojaDocx } from './cabecalhoLoja';
+import { calcularAptidaoVoto } from './calcularAptidaoVoto';
 import { formatarNumeroEdital } from './editais';
 
 // ════════════════════════════════════════════════════════════════════════
@@ -275,6 +276,29 @@ export const gerarAtaSessao = async ({ balaustre, modeloId = null, documento = '
       total_votantes: String((chapas.reduce((t, c) => t + num(c.votos), 0) + num(el.brancos) + num(el.nulos)) || (el.presentes || []).length),
       chapa_vencedora: !vencedora ? '[chapa]' : empate ? 'votação empatada entre as chapas' : `Chapa ${vencedora.i + 1} – ${vencedora.nome}`,
     });
+    // Mestres aptos a votar, já com os ajustes manuais (inapto → apto) desta eleição
+    let totalMestresAptos = 0;
+    try {
+      const { data: irmaosApt } = await supabase.from('irmaos').select('*');
+      const linhasApt = await calcularAptidaoVoto({
+        ref: String(balaustre.data_sessao).substring(0, 10),
+        ini: await (async () => {
+          const ref0 = String(balaustre.data_sessao).substring(0, 10);
+          const { data: ant } = await supabase.from('balaustres')
+            .select('data_sessao').not('eleicao_glemt', 'is', null)
+            .lt('data_sessao', ref0).order('data_sessao', { ascending: false }).limit(1);
+          if (ant && ant[0]) return String(ant[0].data_sessao).substring(0, 10);
+          const d = new Date(`${ref0}T00:00:00`); d.setFullYear(d.getFullYear() - 1);
+          return d.toISOString().substring(0, 10);
+        })(),
+        irmaos: irmaosApt || [],
+        ajustes: el.aptidao_ajustes || {},
+      });
+      totalMestresAptos = (linhasApt || []).filter(l => l.apto).length;
+    } catch (e) { totalMestresAptos = (el.presentes || []).length; }
+    VARS.total_mestres_aptos = String(totalMestresAptos);
+    VARS.total_mestres_aptos_extenso = numeroExtenso(totalMestresAptos);
+
     // Voto em trânsito: Irmãos de outras Lojas (contados à parte dos votantes da Loja)
     const transito = el.voto_transito ? (el.votantes_transito || []).filter(v => v && (v.nome || '').trim()) : [];
     Object.assign(VARS, {
