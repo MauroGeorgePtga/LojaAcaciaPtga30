@@ -184,7 +184,7 @@ const calcularQuorum = (irmaos, eleicao, presencas, historico = []) => {
   return { totalCalculado, totalMestres, quorumMinimo, presentes, atingido: presentes >= quorumMinimo };
 };
 
-const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, irmaos, historico = [], balaustresEl = [], modeloEscolhido = null, comLista = false) => {
+const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, irmaos, historico = [], balaustresEl = [], modeloEscolhido = null, comLista = false, dataEmissao = null) => {
   // Garantia: se o número/data do edital não vieram prontos, busca pelo vínculo em Editais
   let eleicao = eleicaoRecebida;
   const TIPOS_COM_EDITAL = ['edital_eleicao', 'edital_posse', 'ata_eleicao_loja', 'ata_eleicao_cartorio', 'ata_posse', 'ata_posse_cartorio'];
@@ -798,7 +798,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
     VARS.nome_chapa = eleicao.nome_chapa || '[nome da chapa]';
     VARS.nome_chapa_maiusculo = String(eleicao.nome_chapa || '[NOME DA CHAPA]').toUpperCase();
     VARS.data_edital_eleicao_extenso = extensoCap(eleicao.data_edital_eleicao);
-    VARS.data_emissao_extenso = extensoCap(hojeISO());
+    VARS.data_emissao_extenso = extensoCap(dataEmissao || hojeISO());
     VARS.vm_candidato_nome = vmCand ? nomeDe(vmCand.irmao_id) : '[Candidato a Venerável Mestre]';
 
     // Texto do modelo: cada linha = um parágrafo; linha vazia = espaço
@@ -851,7 +851,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
       tabelaChapa,
       ...paragrafos(modelo.rodape),
       vazio({ after: 200 }),
-      vazio({ after: 200 }),
+      prC([ar(`${VARS.cidade} – ${VARS.estado}, ${VARS.data_emissao_extenso}.`)], { before: 0, after: 300 }),
       pr([ar(VARS.vm_candidato_nome, { bold: true })], { before: 0, after: 20, align: AlignmentType.LEFT }),
       pr([ar(modelo.assinatura_1_cargo || 'Candidato à Venerável Mestre')], { before: 0, after: 0, align: AlignmentType.LEFT }),
     ];
@@ -993,7 +993,8 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   // Editais vinculados à eleição selecionada (id → registro da tabela editais)
   const [editaisLoja, setEditaisLoja] = useState({});
   const [emitindoEdital, setEmitindoEdital] = useState('');
-  const [vinculandoEdital, setVinculandoEdital] = useState(''); // '' | 'eleicao' | 'posse'
+  const [vinculandoEdital, setVinculandoEdital] = useState('');
+  const [dataEmissaoQuadro, setDataEmissaoQuadro] = useState(() => new Date().toISOString().substring(0, 10)); // '' | 'eleicao' | 'posse'
   const recarregarEditaisLoja = useCallback(async (el) => {
     const ids = [el?.edital_eleicao_id, el?.edital_posse_id].filter(Boolean);
     if (!ids.length) { setEditaisLoja({}); return; }
@@ -1495,7 +1496,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
     }
   };
 
-  const gerarDoc = async (tipo, nomeArq, modeloId = null, comLista = false) => {
+  const gerarDoc = async (tipo, nomeArq, modeloId = null, comLista = false, dataEmissao = null) => {
     // Edital só é gerado com número emitido (tela Editais)
     const temEditalVinculado = (tipo === 'edital_posse')
       ? !!eleicaoSelecionada?.edital_posse_id
@@ -1557,7 +1558,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
           // cidade e data saem do edital quando a Configuração não tem data
           [posse ? 'data_edital_posse' : 'data_edital_eleicao']: dCfg || ed.data_edital };
       }
-      const buf = await gerarDocx(tipo, eleicaoDoc, chapas, presencas, dadosLoja, irmaos || [], historicoSituacoes, balaustresEleicao, modeloEscolhido, comLista);
+      const buf = await gerarDocx(tipo, eleicaoDoc, chapas, presencas, dadosLoja, irmaos || [], historicoSituacoes, balaustresEleicao, modeloEscolhido, comLista, dataEmissao);
       downloadDocx(buf, nomeArq);
     } catch (e) {
       showError('Erro ao gerar documento: ' + e.message);
@@ -2582,15 +2583,21 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
               Apresentação da Chapa à Loja (Word) e PDF com o quadro de cargos da gestão para enviar aos irmãos.
               {!eleicaoSelecionada.nome_chapa && <span style={{ color: '#f59e0b' }}> Preencha o Nome da Chapa na Configuração.</span>}
             </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+              <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Data de emissão</label>
+              <input type="date" value={dataEmissaoQuadro} onChange={e => setDataEmissaoQuadro(e.target.value)}
+                style={{ ...S.input, width: 'auto', padding: '0.35rem 0.6rem', fontSize: '0.82rem' }} />
+              <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>sai acima da assinatura no Word e no PDF</span>
+            </div>
             <BotaoDoc emoji="📄" label="Apresentação da Chapa (Word)" disabled={chapas.filter(c => c.irmao_id).length === 0} gerando={gerando === 'apresentacao_chapa'}
-              onClick={() => gerarDoc('apresentacao_chapa', `Apresentacao_Chapa_${(eleicaoSelecionada.nome_chapa || 'Chapa').replace(/\s+/g, '_')}.docx`)} />
+              onClick={() => gerarDoc('apresentacao_chapa', `Apresentacao_Chapa_${(eleicaoSelecionada.nome_chapa || 'Chapa').replace(/\s+/g, '_')}.docx`, null, false, dataEmissaoQuadro)} />
             <BotaoDoc emoji="📊" label="Quadro da Gestão (PDF)" disabled={chapaEleita.length === 0} gerando={gerando === 'quadro_gestao'}
               onClick={() => {
                 setGerando('quadro_gestao');
                 try {
                   gerarQuadroGestaoPDF({
                     eleicao: eleicaoSelecionada, chapaEleita, irmaos: irmaos || [], dadosLoja,
-                    logoB64: LOGO_LOJA_B64, ordemCargos: ORDEM_CARGOS,
+                    logoB64: LOGO_LOJA_B64, ordemCargos: ORDEM_CARGOS, dataEmissao: dataEmissaoQuadro,
                     nomeLoja: `ACÁCIA DE PARANATINGA Nº ${dadosLoja.numero_loja || '30'}`,
                   });
                 } catch (e) {
