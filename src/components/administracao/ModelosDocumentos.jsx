@@ -194,6 +194,18 @@ const MODELOS_PADRAO = [
 // (qualificação completa, só V.M., Vigilantes, Orador, Secretário, Tesoureiro e Chanceler)
 MODELOS_PADRAO.push({ ...MODELOS_PADRAO.find(m => m.tipo === 'ata_posse'), tipo: 'ata_posse_cartorio', nome: 'Ata de Posse (Cartório)' });
 
+// Agrupamento das variáveis por assunto (pelo próprio nome), para o painel não ficar embolado
+const GRUPOS_VARIAVEIS = [
+  { titulo: '🏛️ Loja', testa: (v) => /nome_loja|num_loja|endereco_loja|data_fundacao|cidade|estado|cnpj|numero_registro_cartorio|total_mestres|quorum/.test(v) },
+  { titulo: '👤 Cargos e Irmãos', testa: (v) => /vm_|orador|secretario|chanceler|vigilante|instalador|escrutinador|presidente|candidato/.test(v) },
+  { titulo: '📅 Datas e horários', testa: (v) => /data_|hora_|ano_exercicio|ano_balaustre|gestao|periodo_glemt/.test(v) },
+  { titulo: '📕 Balaústre e sessão', testa: (v) => /balaustre|sessao|grau_reuniao|ordem_dia|num_votantes/.test(v) },
+  { titulo: '📢 Edital', testa: (v) => /edital/.test(v) },
+  { titulo: '🗳️ Chapas e apuração', testa: (v) => /chapa|apuracao|proclamacao|votos_|total_votantes|resultado|trecho_votacao/.test(v) },
+  { titulo: '🧳 Voto em trânsito', testa: (v) => /transito|urnas/.test(v) },
+  { titulo: '📄 Outras', testa: () => true },
+];
+
 const VARIAVEIS_DISPONIVEIS = [
   { var: '{vm_nome}',                  desc: 'Nome do VM convocante' },
   { var: '{gestao}',                   desc: 'Gestão (ex: 2026/2027)' },
@@ -667,20 +679,33 @@ export default function ModelosDocumentos({ permissoes, showSuccess, showError, 
               <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '0.6rem', textTransform: 'uppercase' }}>
                 Clique em uma variável para inserir no campo em foco:
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-                {VARIAVEIS_DISPONIVEIS.map(v => (
-                  <button key={v.var}
-                    title={v.desc}
-                    onClick={() => inserirVariavel(v.var)}
-                    style={{
-                      padding: '0.2rem 0.55rem', fontSize: '0.75rem', fontWeight: 600,
-                      background: 'var(--color-accent-bg)', color: 'var(--color-accent)',
-                      border: '1px solid rgba(201,168,76,0.3)', borderRadius: '999px', cursor: 'pointer',
-                    }}>
-                    {v.var}
-                  </button>
-                ))}
-              </div>
+              {(() => {
+                const usadas = new Set();
+                return GRUPOS_VARIAVEIS.map(g => {
+                  const doGrupo = VARIAVEIS_DISPONIVEIS.filter(v => !usadas.has(v.var) && g.testa(v.var));
+                  doGrupo.forEach(v => usadas.add(v.var));
+                  if (!doGrupo.length) return null;
+                  return (
+                    <div key={g.titulo} style={{ marginBottom: '0.7rem' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 800, color: 'var(--color-text)', marginBottom: '0.3rem' }}>{g.titulo}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {doGrupo.map(v => (
+                          <button key={v.var}
+                            title={v.desc}
+                            onClick={() => inserirVariavel(v.var)}
+                            style={{
+                              padding: '0.2rem 0.55rem', fontSize: '0.75rem', fontWeight: 600,
+                              background: 'var(--color-accent-bg)', color: 'var(--color-accent)',
+                              border: '1px solid rgba(201,168,76,0.3)', borderRadius: '999px', cursor: 'pointer',
+                            }}>
+                            {v.var}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
 
