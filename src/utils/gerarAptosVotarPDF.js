@@ -30,13 +30,13 @@ export const gerarAptosVotarPDF = ({ linhas, linhasInaptos = [], eleicao, dadosL
     try { doc.addImage(`data:image/jpeg;base64,${logoB64}`, 'JPEG', M, y, 30, 30); } catch (e) { /* sem logo */ }
   }
   const xt = M + 34 + (W - M - (M + 34)) / 2;
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.setTextColor(...AZUL);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...AZUL);
   doc.text(`A.R.L.S. ACÁCIA DE PARANATINGA Nº ${dadosLoja.numero_loja || '30'}`, xt, y + 8, { align: 'center' });
-  doc.setFontSize(10); doc.setTextColor(...TEXTO);
-  doc.text(`Fundada em ${dadosLoja.data_fundacao ? fmt(dadosLoja.data_fundacao) : '20/12/1997'}`, xt, y + 14, { align: 'center' });
-  doc.text('Jurisdicionada à', xt, y + 19, { align: 'center' });
-  doc.text('Grande Loja Maçônica do Estado de Mato Grosso', xt, y + 24, { align: 'center' });
-  y += 36;
+  doc.setFontSize(9); doc.setTextColor(...TEXTO);
+  doc.text(`Fundada em ${dadosLoja.data_fundacao ? fmt(dadosLoja.data_fundacao) : '20/12/1997'}`, xt, y + 13.5, { align: 'center' });
+  doc.text('Jurisdicionada à', xt, y + 18, { align: 'center' });
+  doc.text('Grande Loja Maçônica do Estado de Mato Grosso', xt, y + 22.5, { align: 'center' });
+  y += 32;
   doc.setDrawColor(...DOURADO); doc.setLineWidth(0.6); doc.line(M, y, W - M, y);
 
   const tituloRelacao = ambos ? 'RELAÇÃO DE IRMÃOS APTOS E INAPTOS A VOTAR' : inaptos ? 'RELAÇÃO DE IRMÃOS INAPTOS A VOTAR' : 'RELAÇÃO DE IRMÃOS APTOS A VOTAR';
@@ -44,17 +44,17 @@ export const gerarAptosVotarPDF = ({ linhas, linhasInaptos = [], eleicao, dadosL
   if (glemt) {
     // ── Eleição da Grande Loja: destaque + critérios (à esquerda) + título da relação ──
     y += 6;
-    const alturaBox = 17;
+    const alturaBox = 15;
     doc.setFillColor(250, 246, 234); doc.setDrawColor(...DOURADO); doc.setLineWidth(0.5);
     doc.roundedRect(M, y, W - 2 * M, alturaBox, 2.5, 2.5, 'FD');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.setTextColor(...AZUL);
-    doc.text('ELEIÇÃO DA GRANDE LOJA MAÇÔNICA DO ESTADO DE MATO GROSSO – GLEMT', W / 2, y + 7, { align: 'center', maxWidth: W - 2 * M - 6 });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...TEXTO);
-    doc.text(`Período ${glemt.periodo || ''}${glemt.dataSessao ? ` — sessão de ${fmt(glemt.dataSessao)}` : ''}`, W / 2, y + 13, { align: 'center' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setTextColor(...AZUL);
+    doc.text('ELEIÇÃO DA GRANDE LOJA MAÇÔNICA DO ESTADO DE MATO GROSSO – GLEMT', W / 2, y + 6, { align: 'center', maxWidth: W - 2 * M - 6 });
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...TEXTO);
+    doc.text(`Período ${glemt.periodo || ''}${glemt.dataSessao ? ` — sessão de ${fmt(glemt.dataSessao)}` : ''}`, W / 2, y + 11.5, { align: 'center' });
     y += alturaBox + 6;
 
     // Critérios (margem esquerda)
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(...TEXTO);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...TEXTO);
     doc.text('Critérios:', M, y);
     y += 4.5;
     const crit = [
@@ -142,8 +142,10 @@ export const gerarAptosVotarPDF = ({ linhas, linhasInaptos = [], eleicao, dadosL
 
   // Assinaturas: VM, Chanceler e Tesoureiro (lado a lado)
   // Assinaturas logo abaixo da tabela (página nova só se não couber)
-  y += 24;
-  if (y > H - 30) { doc.addPage(); y = 40; }
+  // O bloco inteiro ocupa ~16 mm: só vai para a página seguinte se não couber,
+  // e lá começa no alto, logo abaixo da margem (antes caía no pé da folha)
+  y += 16;
+  if (y > H - 26) { doc.addPage(); y = 24; }
   const col = (W - 2 * M) / 3;
   [[assinantes.vm, 'Venerável Mestre'], [assinantes.chanceler, 'Chanceler'], [assinantes.tesoureiro, 'Tesoureiro']].forEach(([nome, cargo], i) => {
     const cx = M + col * i + col / 2;
