@@ -92,7 +92,9 @@ export const gerarAptosVotarPDF = ({ linhas, linhasInaptos = [], eleicao, dadosL
   const tabela = (lista, comLic, rotuloTotal) => {
     doc.autoTable({
       startY: y,
-      margin: { left: M, right: M, bottom: 16 },
+      // Reserva o rodapé para as assinaturas, para a tabela não tomar a página inteira
+      // e deixar os nomes sozinhos na folha seguinte
+      margin: { left: M, right: M, bottom: 42 },
       head: [['Nº', 'Irmão', 'CIM', 'Tesouraria', 'Presença']],
       // Nome completo; prerrogativa por idade identificada com a estrela (desenhada em amarelo)
       body: lista.map((l, i) => [
@@ -114,7 +116,11 @@ export const gerarAptosVotarPDF = ({ linhas, linhasInaptos = [], eleicao, dadosL
         }
       },
       theme: 'grid',
-      styles: { font: 'helvetica', fontSize: 9, cellPadding: { top: 1.3, bottom: 1.3, left: 2, right: 2 }, textColor: TEXTO, lineColor: [226, 232, 240], lineWidth: 0.2 },
+      // Até 19 linhas a tabela fica mais justa, para a relação e as assinaturas
+      // caberem na MESMA página; de 20 em diante segue o tamanho normal (18 na 1ª)
+      styles: lista.length <= 19
+        ? { font: 'helvetica', fontSize: 8.2, cellPadding: { top: 0.9, bottom: 0.9, left: 2, right: 2 }, textColor: TEXTO, lineColor: [226, 232, 240], lineWidth: 0.2 }
+        : { font: 'helvetica', fontSize: 9, cellPadding: { top: 1.3, bottom: 1.3, left: 2, right: 2 }, textColor: TEXTO, lineColor: [226, 232, 240], lineWidth: 0.2 },
       headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [241, 245, 249] },
       columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 2: { cellWidth: 22, halign: 'center' }, 3: { cellWidth: 36 }, 4: { cellWidth: 30, halign: 'center' } },
