@@ -53,7 +53,7 @@ const linhaLoja = (doc, nomeLoja, y, W) => {
   });
 };
 
-export const gerarQuadroGestaoPDF = ({ eleicao, chapaEleita, irmaos, dadosLoja, logoB64, ordemCargos, nomeLoja: nomeLojaParam }) => {
+export const gerarQuadroGestaoPDF = ({ eleicao, chapaEleita, irmaos, dadosLoja, logoB64, ordemCargos, nomeLoja: nomeLojaParam , dataEmissao = null }) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -143,11 +143,11 @@ export const gerarQuadroGestaoPDF = ({ eleicao, chapaEleita, irmaos, dadosLoja, 
     }
     doc.autoTable({
       startY: y + 2.5,
-      margin: { left: M, right: M, bottom: 22 },
+      margin: { left: M, right: M, bottom: 48 },   // reserva espaço para a data e a assinatura
       head, body,
       theme: 'grid',
-      styles: { font: 'helvetica', fontSize: duasColunas ? 9 : 10, cellPadding: { top: 1.8, bottom: 1.8, left: 2.4, right: 2.4 }, textColor: TEXTO, lineColor: [226, 232, 240], lineWidth: 0.2, valign: 'middle' },
-      headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', fontSize: 9.5 },
+      styles: { font: 'helvetica', fontSize: duasColunas ? 8.4 : 9.4, cellPadding: { top: 1.2, bottom: 1.2, left: 2.4, right: 2.4 }, textColor: TEXTO, lineColor: [226, 232, 240], lineWidth: 0.2, valign: 'middle' },
+      headStyles: { fillColor: AZUL, textColor: 255, fontStyle: 'bold', fontSize: 9 },
       alternateRowStyles: { fillColor: [241, 245, 249] },
       columnStyles,
       didParseCell: (d) => { if (duasColunas && d.column.index === 2) d.cell.styles.lineWidth = { left: 0.6, top: 0.2, bottom: 0.2, right: 0.2 }; },
@@ -157,8 +157,16 @@ export const gerarQuadroGestaoPDF = ({ eleicao, chapaEleita, irmaos, dadosLoja, 
 
   // ── Assinatura do Venerável da chapa ──
   const vm = membros.find(c => c.cargo === 'Veneravel Mestre');
-  if (y > H - 45) { doc.addPage(); y = 30; }
-  y += 14;
+  // Cidade e data de emissão, logo acima da assinatura
+  const MESES_Q = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  const dEmissao = String(dataEmissao || new Date().toISOString().substring(0, 10)).substring(0, 10);
+  const [aE, mE, diE] = dEmissao.split('-').map(Number);
+  const emissaoExtenso = `${dadosLoja.cidade || 'Paranatinga'} – ${dadosLoja.estado || 'MT'}, ${String(diE).padStart(2, '0')} de ${MESES_Q[mE - 1]} de ${aE}.`;
+  if (y > H - 42) { doc.addPage(); y = 24; }   // bloco inteiro ~30 mm
+  y += 8;
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...TEXTO);
+  doc.text(emissaoExtenso, W / 2, y, { align: 'center' });
+  y += 10;
   doc.setDrawColor(...TEXTO); doc.setLineWidth(0.3);
   doc.line(W / 2 - 38, y, W / 2 + 38, y);
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXTO);
@@ -168,13 +176,11 @@ export const gerarQuadroGestaoPDF = ({ eleicao, chapaEleita, irmaos, dadosLoja, 
 
   // ── Rodapé em todas as páginas ──
   const total = doc.internal.getNumberOfPages();
-  const emitido = new Date().toLocaleDateString('pt-BR');
   for (let p = 1; p <= total; p++) {
     doc.setPage(p);
     doc.setDrawColor(...DOURADO); doc.setLineWidth(0.3);
     doc.line(M, H - 14, W - M, H - 14);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...CINZA);
-    doc.text(`Emitido em ${emitido}`, M, H - 9);
     doc.text(`Loja ${nomeLoja}`, W / 2, H - 9, { align: 'center' });
     doc.text(`${p} de ${total}`, W - M, H - 9, { align: 'right' });
   }
