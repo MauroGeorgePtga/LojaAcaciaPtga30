@@ -400,6 +400,8 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
     secretario_dados:         secretarioSainte ? dadoIrmao(eleicao.secretario_sainte_id) : '[Secretário]',
     // Eleito (edital posse, ata posse, requerimentos)
     vm_eleito_nome:           vmEleitoNome,
+    // Candidato a Venerável Mestre — antes só existia no documento de apresentação da chapa
+    vm_candidato_nome:        vmEleitoNome,
     orador_eleito_nome:       oradorEleitoNome,
     secretario_eleito_nome:   secretarioEleitoNome,
     secretario_eleito_dados:  secretarioEleito ? dadoIrmao(secretarioEleito.irmao_id) : '[Secretário Eleito]',
