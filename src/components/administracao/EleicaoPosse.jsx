@@ -375,6 +375,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
     })(),
     data_atual:               (() => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })(),
     nome_loja:                nomeLoja,
+    nome_loja_normal:         `Acácia de Paranatinga nº ${dadosLoja.numero_loja || '30'}`,  // sem caixa alta
     num_loja:                 dadosLoja.numero_loja || '30',
     data_eleicao:             formatarData(eleicao.data_eleicao),
     hora_eleicao:             eleicao.hora_eleicao?.substring(0,5) || '20:00',
