@@ -603,7 +603,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
     .filter(c => !soCartorio || CARGOS_ATA_CARTORIO.includes(c.cargo))
     .sort((a, b) => ORDEM_CARGOS.indexOf(a.cargo) - ORDEM_CARGOS.indexOf(b.cargo))
     .map(c => pr([
-      ar(`${c.cargo}: `, { bold: true }),
+      ar(`${rotuloCargo(c.cargo)}: `, { bold: true }),
       ar((simples ? dadoIrmaoLoja(c.irmao_id) : dadoIrmao(c.irmao_id)) + ';'),
     ], { before: 80, after: 80 }));
 
@@ -710,7 +710,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
       .sort((a, b) => ORDEM_CARGOS.indexOf(a.cargo) - ORDEM_CARGOS.indexOf(b.cargo))
       .flatMap(ch => {
         const irmao = irmaos.find(i => i.id === ch.irmao_id);
-        return irmao ? assinatura(`Ir∴ ${irmao.nome.toUpperCase()}`, NOME_CARGO_ASS[ch.cargo] || ch.cargo) : [];
+        return irmao ? assinatura(`Ir∴ ${irmao.nome.toUpperCase()}`, NOME_CARGO_ASS[ch.cargo] || rotuloCargo(ch.cargo)) : [];
       });
 
     // Comissão instaladora (aba Configuração): VM Instalador em cima, Vigilantes lado a lado
@@ -760,7 +760,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
         .map(ch => {
           const irmao = irmaos.find(i => i.id === ch.irmao_id);
           return pr([
-            ar(`${ch.cargo}: `, { bold: true }),
+            ar(`${rotuloCargo(ch.cargo)}: `, { bold: true }),
             ar(irmao ? (posseCartorio ? dadoIrmao(ch.irmao_id) : dadoIrmaoLoja(ch.irmao_id)) : '[Irmão não encontrado]'),
           ], { before: 60, after: 60 });
         }),
@@ -885,7 +885,7 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
       rows: [
         new TableRow({ tableHeader: true, children: [celula('Cargo', CWc[0]), celula('Irmãos', CWc[1])] }),
         ...membros.map(c => new TableRow({ children: [
-          celula(NOME_CARGO[c.cargo] || c.cargo, CWc[0], true),
+          celula(NOME_CARGO[c.cargo] || rotuloCargo(c.cargo), CWc[0], true),
           celula(`Ir∴ ${nomeDe(c.irmao_id)}`, CWc[1]),
         ]})),
       ],
