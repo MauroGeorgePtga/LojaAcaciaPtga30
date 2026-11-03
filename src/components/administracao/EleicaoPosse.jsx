@@ -187,8 +187,9 @@ const calcularQuorum = (irmaos, eleicao, presencas, historico = []) => {
 const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, irmaos, historico = [], balaustresEl = [], modeloEscolhido = null, comLista = false) => {
   // Garantia: se o número/data do edital não vieram prontos, busca pelo vínculo em Editais
   let eleicao = eleicaoRecebida;
-  if (tipo === 'edital_eleicao' || tipo === 'edital_posse') {
-    const posse = tipo === 'edital_posse';
+  const TIPOS_COM_EDITAL = ['edital_eleicao', 'edital_posse', 'ata_eleicao_loja', 'ata_eleicao_cartorio', 'ata_posse', 'ata_posse_cartorio'];
+  if (TIPOS_COM_EDITAL.includes(tipo)) {
+    const posse = tipo === 'edital_posse' || tipo === 'ata_posse' || tipo === 'ata_posse_cartorio';
     const num = posse ? eleicao?.edital_posse_numero : eleicao?.edital_eleicao_numero;
     const idEd = posse ? eleicao?.edital_posse_id : eleicao?.edital_eleicao_id;
     if (!num && idEd) {
@@ -356,8 +357,11 @@ const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, ir
     ano_exercicio:            eleicao.ano_exercicio || gestao,
     nome_chapa:               eleicao.nome_chapa || '[nome da chapa]',
     // Edital: número sequencial contínuo (eleição e posse compartilham a mesma sequência)
-    numero_edital:            (() => { const posse = tipo === 'edital_posse'; const n = posse ? eleicao.edital_posse_numero : eleicao.edital_eleicao_numero; return n ? formatarNumeroEdital(n, anoDoEdital(eleicao, posse)) : '[nº]'; })(),
-    ano_edital:               String(anoDoEdital(eleicao, tipo === 'edital_posse')),
+    numero_edital:            (() => { const posse = ['edital_posse', 'ata_posse', 'ata_posse_cartorio'].includes(tipo); const n = posse ? eleicao.edital_posse_numero : eleicao.edital_eleicao_numero; return n ? formatarNumeroEdital(n, anoDoEdital(eleicao, posse)) : '[nº]'; })(),
+    ano_edital:               String(anoDoEdital(eleicao, ['edital_posse', 'ata_posse', 'ata_posse_cartorio'].includes(tipo))),
+    // Data do edital correspondente ao documento (edital ou ata)
+    data_edital:              formatarDataExtenso(['edital_posse', 'ata_posse', 'ata_posse_cartorio'].includes(tipo) ? eleicao.data_edital_posse : eleicao.data_edital_eleicao),
+    data_edital_curta:        formatarData(['edital_posse', 'ata_posse', 'ata_posse_cartorio'].includes(tipo) ? eleicao.data_edital_posse : eleicao.data_edital_eleicao),
     // Balaustre da sessão (Eleição da Loja → atas de eleição; Posse da Loja → ata de posse)
     ...(() => {
       const esp = (tipo === 'ata_posse' || tipo === 'ata_posse_cartorio') ? 'posse_loja' : 'eleicao_loja';
