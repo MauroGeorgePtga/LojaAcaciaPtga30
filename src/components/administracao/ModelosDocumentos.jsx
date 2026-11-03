@@ -298,6 +298,7 @@ const VARIAVEIS_DISPONIVEIS = [
   { var: '{presidente_requerimento}',  desc: 'Requerimentos: nome do presidente que assina (maiúsculas)' },
   { var: '{presidente_requerimento_qualificacao}', desc: 'Requerimentos: qualificação do presidente (estado civil, RG, CPF, endereço)' },
   { var: '{total_mestres}',            desc: 'Total de irmãos Mestres (base do quórum)' },
+  { var: '{total_mestres_aptos}',      desc: 'Mestres aptos a votar, já com os ajustes manuais de aptidão (+ _extenso)' },
   { var: '{quorum_minimo}',            desc: 'Quórum mínimo: 1/3 dos Mestres' },
   { var: '{trecho_votacao}',           desc: 'Trecho automático (aclamação ou disputa)' },
   { var: '{cnpj}',                     desc: 'CNPJ da loja' },
