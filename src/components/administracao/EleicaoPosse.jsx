@@ -184,7 +184,25 @@ const calcularQuorum = (irmaos, eleicao, presencas, historico = []) => {
   return { totalCalculado, totalMestres, quorumMinimo, presentes, atingido: presentes >= quorumMinimo };
 };
 
-const gerarDocx = async (tipo, eleicao, chapas, presencas, dadosLoja, irmaos, historico = [], balaustresEl = [], modeloEscolhido = null, comLista = false) => {
+const gerarDocx = async (tipo, eleicaoRecebida, chapas, presencas, dadosLoja, irmaos, historico = [], balaustresEl = [], modeloEscolhido = null, comLista = false) => {
+  // Garantia: se o número/data do edital não vieram prontos, busca pelo vínculo em Editais
+  let eleicao = eleicaoRecebida;
+  if (tipo === 'edital_eleicao' || tipo === 'edital_posse') {
+    const posse = tipo === 'edital_posse';
+    const num = posse ? eleicao?.edital_posse_numero : eleicao?.edital_eleicao_numero;
+    const idEd = posse ? eleicao?.edital_posse_id : eleicao?.edital_eleicao_id;
+    if (!num && idEd) {
+      const { data: ed } = await supabase.from('editais').select('*').eq('id', idEd).maybeSingle();
+      if (ed) {
+        eleicao = { ...eleicao,
+          [posse ? 'edital_posse_numero' : 'edital_eleicao_numero']: ed.numero,
+          [posse ? 'edital_posse_ano' : 'edital_eleicao_ano']: ed.ano,
+          [posse ? 'data_edital_posse' : 'data_edital_eleicao']:
+            (posse ? eleicao?.data_edital_posse : eleicao?.data_edital_eleicao) || ed.data_edital,
+        };
+      }
+    }
+  }
 
   const modelos      = await buscarModelos();
   // Ata de Posse (Cartório) sem modelo próprio ainda: usa o texto do modelo de Ata de Posse
