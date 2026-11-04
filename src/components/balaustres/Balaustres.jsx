@@ -15,6 +15,7 @@ const Balaustres = ({
   showSuccess, 
   showError,
   permissoes,
+  userData,
   grauUsuario,
   podeEditarModelos = false,
   onAbrirModelos,
@@ -956,6 +957,7 @@ const Balaustres = ({
           onSaved={onUpdate}
           onMarcarRealizada={marcarRealizada}
           onVoltarPendente={voltarPendente}
+          userData={userData}
           showSuccess={showSuccess}
           showError={showError}
         />
