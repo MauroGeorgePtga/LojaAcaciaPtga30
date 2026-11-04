@@ -24,7 +24,7 @@ const VAZIA = () => {
     brancos: '', nulos: '', votantes: '', escrutinador1_id: '', escrutinador2_id: '', escrutinadores_assinam: true, presentes: [], aptidao_ajustes: {}, bloquear_inaptos: false };
 };
 
-export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSaved, onMarcarRealizada, onVoltarPendente, showSuccess, showError }) {
+export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSaved, onMarcarRealizada, onVoltarPendente, userData, showSuccess, showError }) {
   const [aba, setAba] = useState('config');
   const [el, setElState] = useState(() => ({ ...VAZIA(), ...(balaustre.eleicao_glemt || {}) }));
   const [alterado, setAlterado] = useState(false);
@@ -47,7 +47,37 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
     return () => { vivo = false; };
   }, [el.edital_id]);
 
-  const setEl = (campos) => { setElState(e => ({ ...e, ...campos })); setAlterado(true); };
+  // ── Trava do processo (encerrada a eleição, só os documentos continuam) ──
+  const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cargoUsuario = semAcento(userData?.cargo);
+  const podeLiberar = String(userData?.nivel_acesso || '').toLowerCase() === 'admin'
+    || cargoUsuario.includes('veneravel') || cargoUsuario.includes('secretario');
+  const travada = !!el.encerrada;
+  const [avisoTrava, setAvisoTrava] = useState(false);
+  const editavel = podeEditar && !travada;
+
+  const setEl = (campos) => {
+    if (travada) { setAvisoTrava(true); return; }   // nada de alterar dados após o encerramento
+    setElState(e => ({ ...e, ...campos })); setAlterado(true);
+  };
+
+  const encerrarEleicao = async () => {
+    if (!podeLiberar) { setAvisoTrava(true); return; }
+    if (!window.confirm('Encerrar a eleição da GLEMT?\nOs dados ficam bloqueados; os documentos continuam podendo ser gerados.')) return;
+    const novo = { ...el, encerrada: true, encerrada_em: new Date().toISOString() };
+    const { data, error } = await supabase.from('balaustres').update({ eleicao_glemt: novo }).eq('id', balaustre.id).select();
+    if (error || !data?.length) { showError('Erro ao encerrar: ' + (error?.message || 'sem permissão')); return; }
+    setElState(novo); setAlterado(false); showSuccess('🔒 Eleição da GLEMT encerrada.'); onSaved?.();
+  };
+
+  const liberarEleicao = async () => {
+    if (!podeLiberar) { setAvisoTrava(true); return; }
+    if (!window.confirm('Liberar a eleição da GLEMT para edição?')) return;
+    const novo = { ...el, encerrada: false };
+    const { data, error } = await supabase.from('balaustres').update({ eleicao_glemt: novo }).eq('id', balaustre.id).select();
+    if (error || !data?.length) { showError('Erro ao liberar: ' + (error?.message || 'sem permissão')); return; }
+    setElState(novo); setAvisoTrava(false); showSuccess('🔓 Liberado para edição.'); onSaved?.();
+  };
   const setChapa = (i, campos) => setEl({ chapas: el.chapas.map((c, k) => (k === i ? { ...c, ...campos } : c)) });
   const pendente = el.status === 'pendente';
   const ref = balaustre.data_sessao;
@@ -116,7 +146,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
 
   // Emite o edital (próximo nº do ano) já com a descrição e vincula a esta eleição
   const emitir = async () => {
-    if (!podeEditar || emitindo) return;
+    if (!editavel || emitindo) return;
     if (!ref) { showError('Sessão sem data: informe a data da sessão antes de emitir o edital.'); return; }
     setEmitindo(true);
     let reg = null;
@@ -144,7 +174,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
 
   // Vincula um edital já cadastrado (em vez de emitir outro)
   const vincular = async (ed) => {
-    if (!podeEditar || emitindo) return;
+    if (!editavel || emitindo) return;
     setEmitindo(true);
     try {
       const { data: e1, error: er1 } = await supabase.from('editais')
@@ -168,7 +198,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
   };
   // Desfaz o vínculo (o edital continua cadastrado e fica livre para outro uso)
   const desvincular = async () => {
-    if (!podeEditar || !edital || emitindo) return;
+    if (!editavel || !edital || emitindo) return;
     if (!window.confirm(`Desvincular o edital nº ${formatarNumeroEdital(edital.numero, edital.ano)} desta eleição?\nEle continua em Editais e o documento fica bloqueado até vincular/emitir outro.`)) return;
     setEmitindo(true);
     try {
@@ -254,7 +284,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
         const r = await gerarAtaSessao({ balaustre: balaustreAtual, modeloId: modelos[0]?.id || null });
         if (r?.faltando?.length) showError(`Falta no Corpo Administrativo: ${r.faltando.join(', ')}.`);
       }
-      if (alterado && podeEditar) salvar(true);
+      if (alterado && editavel) salvar(true);
     } catch (e) {
       showError('Erro ao gerar: ' + e.message);
     } finally {
@@ -303,13 +333,13 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
   //  2) Tesouraria: OK/Pendência | Presença: %   — o selo Apto/Inapto vai na cor da borda (clique no cartão inapto/ajustado para ajustar)
   const cardIrmao = (l) => {
     const presente = pres.includes(String(l.irmao.id));
-    const podeAjustar = podeEditar && (l.ajuste || !l.aptoAuto);
+    const podeAjustar = editavel && (l.ajuste || !l.aptoAuto);
     const corBorda = presente ? 'rgba(16,185,129,0.7)' : l.apto ? 'var(--color-border)' : 'rgba(239,68,68,0.45)';
     return (
       <div key={l.irmao.id} style={{ border: `1px solid ${corBorda}`, borderRadius: 'var(--radius-md)', padding: '0.3rem 0.5rem',
         background: presente ? 'rgba(16,185,129,0.08)' : 'var(--color-surface-2)', minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }}>
-          <input type="checkbox" checked={presente} disabled={!podeEditar} onChange={() => togglePresente(l)} title="Presente na sessão" style={{ flexShrink: 0 }} />
+          <input type="checkbox" checked={presente} disabled={!editavel} onChange={() => togglePresente(l)} title="Presente na sessão" style={{ flexShrink: 0 }} />
           <span style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }} title={l.nome}>{l.nomeCurto}</span>
           {l.isento70 && <span title="Prerrogativa por idade: presença dispensada" style={{ color: '#facc15', fontSize: '0.8rem', flexShrink: 0 }}>★</span>}
           {l.licenca && <span title="Licenciado na data da eleição" style={{ fontSize: '0.58rem', color: '#d97706', fontWeight: 800, flexShrink: 0 }}>Lic</span>}
@@ -333,9 +363,20 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
         <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <h3 style={{ margin: 0, flex: 1, fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)' }}>
             🗳️ Eleição GLEMT — {pendente ? '⏳ Pendente' : `Balaústre nº ${balaustre.numero_balaustre}/${balaustre.ano_balaustre}`}
+            {travada && (
+              <span style={{ marginLeft: '0.5rem', fontSize: '0.72rem', fontWeight: 800, color: '#c9a84c', border: '1px solid rgba(201,168,76,0.5)', borderRadius: '999px', padding: '0.1rem 0.5rem' }}>
+                🔒 Encerrada{el.encerrada_em ? ` em ${String(el.encerrada_em).substring(0, 10).split('-').reverse().join('/')}` : ''}
+              </span>
+            )}
+            {podeLiberar && (
+              <button type="button" onClick={travada ? liberarEleicao : encerrarEleicao}
+                style={{ marginLeft: '0.5rem', fontSize: '0.72rem', fontWeight: 700, background: 'transparent', border: '1px solid var(--color-border)', borderRadius: '999px', padding: '0.1rem 0.6rem', color: 'var(--color-text-muted)', cursor: 'pointer' }}>
+                {travada ? '🔓 Liberar' : '🔒 Encerrar eleição'}
+              </button>
+            )}
             <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--color-text-muted)' }}> · sessão de {fmt(ref)}{periodoTxt ? ` · Período ${periodoTxt}` : ''}</span>
           </h3>
-          {podeEditar && (
+          {editavel && (
             <button onClick={() => salvar()} disabled={salvando || !alterado} style={{ ...btn('#fff', ROXO), opacity: alterado ? 1 : 0.5 }}>
               {salvando ? 'Salvando…' : '💾 Salvar'}
             </button>
@@ -354,7 +395,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
         <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', flex: 1 }}>
           {/* ── 1. Configuração ── */}
           {aba === 'config' && (
-            <fieldset disabled={!podeEditar} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
+            <fieldset disabled={!editavel} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div style={card}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0,1fr))', gap: '0.6rem', alignItems: 'end' }}>
@@ -372,7 +413,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
                     ) : <div style={{ ...inp, color: '#10b981', fontWeight: 700 }}>✅ Realizada</div>}
                   </div>
                 </div>
-                {!pendente && podeEditar && (
+                {!pendente && editavel && (
                   <button type="button" onClick={async () => { if (alterado) await salvar(true); onVoltarPendente?.(balaustreAtual); }}
                     style={{ ...btn('#f59e0b', 'rgba(245,158,11,0.12)'), width: '100%', marginTop: '0.5rem' }}>
                     ↩️ Voltar para pendente (libera o nº do balaustre)
@@ -392,18 +433,18 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
                   {edital ? (<>
                     <span style={{ fontWeight: 800, color: '#10b981' }}>{formatarNumeroEdital(edital.numero, edital.ano)}</span>
                     <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>{edital.descricao} (consulte/edite em Expedientes → Editais)</span>
-                    {podeEditar && <button type="button" disabled={emitindo} onClick={desvincular} style={btn('#94a3b8')}>↩️ Desvincular</button>}
+                    {editavel && <button type="button" disabled={emitindo} onClick={desvincular} style={btn('#94a3b8')}>↩️ Desvincular</button>}
                   </>) : (<>
                     <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#f59e0b' }}>⛔ Não emitido — o documento fica bloqueado</span>
-                    {podeEditar && (
+                    {editavel && (
                       <button type="button" disabled={emitindo} onClick={emitir} style={btn('#10b981', 'rgba(16,185,129,0.12)')}>
                         {emitindo ? '⏳ Emitindo…' : '📢 Emitir edital (próximo nº automático)'}
                       </button>
                     )}
-                    {podeEditar && (
+                    {editavel && (
                       <button type="button" disabled={emitindo} onClick={() => setVinculando(v => !v)} style={btn('#8b5cf6', 'rgba(139,92,246,0.12)')}>🔗 Vincular edital existente</button>
                     )}
-                    {podeEditar && vinculando && <VincularEdital tipo="eleicao_glemt" ocupado={emitindo} onEscolher={vincular} onFechar={() => setVinculando(false)} />}
+                    {editavel && vinculando && <VincularEdital tipo="eleicao_glemt" ocupado={emitindo} onEscolher={vincular} onFechar={() => setVinculando(false)} />}
                   </>)}
                 </div>
               </div>
@@ -411,8 +452,8 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
               <div style={card}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <strong style={{ fontSize: '0.85rem', color: ROXO }}>Escrutinadores</strong>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--color-text)', cursor: podeEditar ? 'pointer' : 'default' }}>
-                    <input type="checkbox" disabled={!podeEditar}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--color-text)', cursor: editavel ? 'pointer' : 'default' }}>
+                    <input type="checkbox" disabled={!editavel}
                       checked={el.escrutinadores_assinam ?? true}
                       onChange={e => setEl({ escrutinadores_assinam: e.target.checked })} />
                     Assinam a ata
@@ -476,10 +517,10 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
                     style={{ ...btn(filtro === k ? ROXO : 'var(--color-text-muted)', filtro === k ? 'rgba(139,92,246,0.12)' : 'transparent'), padding: '0.3rem 0.75rem', borderRadius: '999px' }}>{l}</button>
                 ))}
                 <span style={{ flex: 1 }} />
-                <button type="button" disabled={!podeEditar} onClick={() => setEl({ presentes: (el.bloquear_inaptos ? aptos : linhas).map(l => String(l.irmao.id)) })} style={btn('var(--color-text-muted)')}>Marcar todos</button>
-                <button type="button" disabled={!podeEditar} onClick={() => setEl({ presentes: [] })} style={btn('var(--color-text-muted)')}>Limpar presença</button>
+                <button type="button" disabled={!editavel} onClick={() => setEl({ presentes: (el.bloquear_inaptos ? aptos : linhas).map(l => String(l.irmao.id)) })} style={btn('var(--color-text-muted)')}>Marcar todos</button>
+                <button type="button" disabled={!editavel} onClick={() => setEl({ presentes: [] })} style={btn('var(--color-text-muted)')}>Limpar presença</button>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text)' }}>
-                  <input type="checkbox" disabled={!podeEditar} checked={!!el.bloquear_inaptos} onChange={e => setEl({ bloquear_inaptos: e.target.checked })} />
+                  <input type="checkbox" disabled={!editavel} checked={!!el.bloquear_inaptos} onChange={e => setEl({ bloquear_inaptos: e.target.checked })} />
                   Bloquear presença dos inaptos
                 </label>
               </div>
@@ -493,7 +534,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
               {/* Voto em trânsito: Irmãos de outras Lojas (raro) — contados à parte dos votantes da Loja */}
               <div style={{ ...card, borderLeft: '4px solid #f59e0b' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', fontWeight: 700, color: 'var(--color-text)' }}>
-                  <input type="checkbox" disabled={!podeEditar} checked={!!el.voto_transito}
+                  <input type="checkbox" disabled={!editavel} checked={!!el.voto_transito}
                     onChange={e => setEl({ voto_transito: e.target.checked })} />
                   🧳 Haverá votantes em trânsito (Irmãos de outras Lojas)
                 </label>
@@ -504,16 +545,16 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
                   {(el.votantes_transito || []).map((v, i) => (
                     <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.8fr 1.4fr 1fr auto', gap: '0.4rem', marginBottom: '0.35rem' }}>
                       {[['nome', 'Nome do Irmão'], ['cim', 'CIM'], ['loja', 'Loja de origem (nome e nº)'], ['oriente', 'Oriente']].map(([k, ph]) => (
-                        <input key={k} type="text" placeholder={ph} disabled={!podeEditar} value={v[k] || ''}
+                        <input key={k} type="text" placeholder={ph} disabled={!editavel} value={v[k] || ''}
                           onChange={e => setEl({ votantes_transito: (el.votantes_transito || []).map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)) })}
                           style={INP_T} />
                       ))}
-                      <button type="button" disabled={!podeEditar} title="Remover"
+                      <button type="button" disabled={!editavel} title="Remover"
                         onClick={() => setEl({ votantes_transito: (el.votantes_transito || []).filter((x, j) => j !== i) })}
                         style={btn('#ef4444', 'rgba(239,68,68,0.1)')}>✕</button>
                     </div>
                   ))}
-                  <button type="button" disabled={!podeEditar}
+                  <button type="button" disabled={!editavel}
                     onClick={() => setEl({ votantes_transito: [...(el.votantes_transito || []), { nome: '', cim: '', loja: '', oriente: '' }] })}
                     style={btn('#f59e0b', 'rgba(245,158,11,0.12)')}>➕ Adicionar Irmão em trânsito</button>
                   <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', fontWeight: 700, color: '#f59e0b' }}>
@@ -547,7 +588,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
 
           {/* ── 3. Apuração ── */}
           {aba === 'apuracao' && (
-            <fieldset disabled={!podeEditar} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
+            <fieldset disabled={!editavel} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div style={card}>
                 <strong style={{ fontSize: '0.85rem', color: ROXO }}>Votos por chapa</strong>
@@ -704,6 +745,25 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
               style={{ width: '100%', marginTop: '0.8rem', height: '36px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 700, cursor: 'pointer' }}>
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso: eleição da GLEMT encerrada */}
+      {avisoTrava && (
+        <div onClick={() => setAvisoTrava(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', width: '100%', maxWidth: '440px', padding: '1.2rem' }}>
+            <h3 style={{ margin: '0 0 0.6rem', fontSize: '1rem', fontWeight: 800, color: '#f59e0b' }}>🔒 Processo encerrado</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.88rem', color: 'var(--color-text)' }}>
+              A eleição da GLEMT já foi encerrada. Alterações dependem de autorização do Venerável Mestre.
+              Os documentos continuam podendo ser gerados.
+            </p>
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <button type="button" onClick={() => setAvisoTrava(false)} style={{ ...btn('#94a3b8'), flex: 1 }}>Entendi</button>
+              {podeLiberar && (
+                <button type="button" onClick={liberarEleicao} style={{ ...btn('#10b981', 'rgba(16,185,129,0.12)'), flex: 1 }}>🔓 Liberar para edição</button>
+              )}
+            </div>
           </div>
         </div>
       )}
