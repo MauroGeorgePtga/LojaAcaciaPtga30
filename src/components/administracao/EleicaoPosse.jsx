@@ -1741,12 +1741,12 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
                     <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.3rem' }}>
                       {el.eleicao_encerrada && (
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', color: '#c9a84c', border: '1px solid rgba(201,168,76,0.5)' }}>
-                          🔒 Eleição encerrada{el.eleicao_encerrada_em ? ` em ${formatarData(el.eleicao_encerrada_em)}` : ''}
+                          🔒 Eleição encerrada{el.eleicao_encerrada_em ? ` em ${formatarData(String(el.eleicao_encerrada_em).substring(0, 10))}` : ''}
                         </span>
                       )}
                       {el.posse_encerrada && (
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', color: '#c9a84c', border: '1px solid rgba(201,168,76,0.5)' }}>
-                          🔒 Posse encerrada{el.posse_encerrada_em ? ` em ${formatarData(el.posse_encerrada_em)}` : ''}
+                          🔒 Posse encerrada{el.posse_encerrada_em ? ` em ${formatarData(String(el.posse_encerrada_em).substring(0, 10))}` : ''}
                         </span>
                       )}
                       {(el.registro_numero || el.registro_averbacao || el.registro_data) && (
@@ -2136,13 +2136,13 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
             {/* Travas do processo */}
             {eleicaoTravada && (
               <span style={{ ...S.badge('gold'), display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                🔒 Eleição encerrada{eleicaoSelecionada.eleicao_encerrada_em ? ` em ${formatarData(eleicaoSelecionada.eleicao_encerrada_em)}` : ''}
+                🔒 Eleição encerrada{eleicaoSelecionada.eleicao_encerrada_em ? ` em ${formatarData(String(eleicaoSelecionada.eleicao_encerrada_em).substring(0, 10))}` : ''}
                 {podeLiberar && <button onClick={() => liberarEtapa('eleicao')} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>liberar</button>}
               </span>
             )}
             {posseTravada && (
               <span style={{ ...S.badge('gold'), display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                🔒 Posse encerrada{eleicaoSelecionada.posse_encerrada_em ? ` em ${formatarData(eleicaoSelecionada.posse_encerrada_em)}` : ''}
+                🔒 Posse encerrada{eleicaoSelecionada.posse_encerrada_em ? ` em ${formatarData(String(eleicaoSelecionada.posse_encerrada_em).substring(0, 10))}` : ''}
                 {podeLiberar && <button onClick={() => liberarEtapa('posse')} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>liberar</button>}
               </span>
             )}
