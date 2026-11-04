@@ -573,7 +573,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
                 return (
                   <>
                     <div style={{ ...card, borderLeft: '4px solid #10b981' }}>
-                      <strong style={{ fontSize: '0.85rem', color: '#10b981' }}>✅ Irmãos Aptos ({aptos.length})</strong>
+                      <strong style={{ fontSize: '0.85rem', color: '#10b981' }}>✅ Irmãos Aptos ({aptos.length}) · Presentes: {aptos.filter(l => pres.includes(String(l.irmao.id))).length}</strong>
                       <div style={{ marginTop: '0.5rem' }}>{grade(aptos)}</div>
                     </div>
                     <div style={{ ...card, borderLeft: '4px solid #ef4444' }}>
