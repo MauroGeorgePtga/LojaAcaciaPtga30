@@ -1173,6 +1173,7 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
 
   // ── Carregamento ─────────────────────────────────────────
 
+  const [vmPorEleicao, setVmPorEleicao] = useState({});
   const carregar = useCallback(async () => {
     setLoading(true);
     try {
@@ -1184,6 +1185,13 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
         .select('*')
         .order('created_at', { ascending: false });
       setEleicoes(el || []);
+      // Venerável eleito de cada gestão, para mostrar na lista
+      const { data: eleitos } = await supabase.from('eleicao_chapas').select('eleicao_id, cargo, irmao_id, eleita').eq('eleita', true);
+      const porEleicao = {};
+      (eleitos || []).forEach(c => {
+        if (c.cargo === 'Veneravel Mestre' || c.cargo === 'Venerável Mestre') porEleicao[String(c.eleicao_id)] = c.irmao_id;
+      });
+      setVmPorEleicao(porEleicao);
       // Voltando de "Modelos de Documentos": reabre a mesma eleição na aba Documentos
       try {
         const ret = JSON.parse(sessionStorage.getItem(CHAVE_RETORNO) || 'null');
@@ -1722,6 +1730,32 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
                       {el.data_eleicao && `Eleição: ${formatarData(el.data_eleicao)}`}
                       {el.data_posse && ` · Posse: ${formatarData(el.data_posse)}`}
                       {` · ${el.tipo_votacao === 'aclamacao' ? 'Aclamação' : 'Disputa'}`}
+                    </div>
+                    {/* Venerável da gestão */}
+                    {vmPorEleicao[String(el.id)] && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--color-text)', marginTop: '0.15rem' }}>
+                        👤 Venerável: <strong>{irmaos.find(i => String(i.id) === String(vmPorEleicao[String(el.id)]))?.nome || '—'}</strong>
+                      </div>
+                    )}
+                    {/* Travas e registro em cartório */}
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.3rem' }}>
+                      {el.eleicao_encerrada && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', color: '#c9a84c', border: '1px solid rgba(201,168,76,0.5)' }}>
+                          🔒 Eleição encerrada{el.eleicao_encerrada_em ? ` em ${formatarData(el.eleicao_encerrada_em)}` : ''}
+                        </span>
+                      )}
+                      {el.posse_encerrada && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', color: '#c9a84c', border: '1px solid rgba(201,168,76,0.5)' }}>
+                          🔒 Posse encerrada{el.posse_encerrada_em ? ` em ${formatarData(el.posse_encerrada_em)}` : ''}
+                        </span>
+                      )}
+                      {(el.registro_numero || el.registro_averbacao || el.registro_data) && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', color: '#60a5fa', border: '1px solid rgba(96,165,250,0.5)' }}>
+                          🏛️ {el.registro_numero ? `Registro ${el.registro_numero}` : 'Registrado'}
+                          {el.registro_averbacao ? ` · Averbação ${el.registro_averbacao}` : ''}
+                          {el.registro_data ? ` · ${formatarData(el.registro_data)}` : ''}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <span style={{ color: 'var(--color-accent)', fontSize: '1.25rem' }}>›</span>
