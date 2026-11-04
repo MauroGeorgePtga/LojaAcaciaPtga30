@@ -2121,6 +2121,7 @@ ${filho.falecido ? `<div class="info-item"><span class="info-label">Status:</spa
         {currentPage === 'eleicao-posse' && (
           <EleicaoPosse
             irmaos={irmaos}
+            userData={userData}
             permissoes={permissoes}
             podeEditarModelos={pode(mapaPermissoes, 'modelos', 'editar')}
             onAbrirModelos={() => { setRetornoModelos('eleicao-posse'); setCurrentPage('modelos-documentos'); }}
