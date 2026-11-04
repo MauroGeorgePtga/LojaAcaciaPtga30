@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 import { formatarData } from '../../utils/formatters';
+import { dadosDaEleicao, gerarPranchaInstalacaoDocx, gerarPranchaInstalacaoPDF } from '../../utils/gerarPranchaInstalacao';
 
 const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grauUsuario }) => {
   // Estados do formulário
@@ -20,6 +21,41 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
   const [modalVisualizar, setModalVisualizar] = useState(false);
   const [anoSelecionado, setAnoSelecionado] = useState(null);
   const [modalAberto, setModalAberto] = useState(false);
+  // Prancha de requerimento de instalação à GLEMT
+  const [eleicoes, setEleicoes] = useState([]);
+  const [eleicaoPrancha, setEleicaoPrancha] = useState('');
+  const [gerandoDoc, setGerandoDoc] = useState('');
+  useEffect(() => {
+    supabase.from('eleicoes').select('id, gestao, data_eleicao, data_posse')
+      .order('data_eleicao', { ascending: false })
+      .then(({ data }) => setEleicoes(data || []));
+  }, []);
+
+  // Próximo número do ano: 034/2026
+  const proximoNumero = () => {
+    const ano = new Date().getFullYear();
+    const doAno = (pranchas || []).filter(p => String(p.numero_prancha || '').endsWith(`/${ano}`));
+    const maior = doAno.reduce((m, p) => Math.max(m, parseInt(String(p.numero_prancha).split('/')[0]) || 0), 0);
+    return `${String(maior + 1).padStart(3, '0')}/${ano}`;
+  };
+
+  // Gera a prancha (Word ou PDF) com os dados da eleição escolhida
+  const gerarPrancha = async (formato) => {
+    if (!eleicaoPrancha) { showError('Escolha a eleição de referência.'); return; }
+    if (!pranchaForm.numero_prancha || !pranchaForm.data_prancha) { showError('Preencha o número e a data da prancha.'); return; }
+    setGerandoDoc(formato);
+    try {
+      const V = await dadosDaEleicao(eleicaoPrancha);
+      const args = { prancha: pranchaForm, V, corpo: null, titulo: null };
+      if (formato === 'pdf') gerarPranchaInstalacaoPDF(args);
+      else await gerarPranchaInstalacaoDocx(args);
+      showSuccess(`Prancha gerada em ${formato === 'pdf' ? 'PDF' : 'Word'}!`);
+    } catch (e) {
+      showError('Erro ao gerar a prancha: ' + e.message);
+    } finally {
+      setGerandoDoc('');
+    }
+  };
 
   // Função para tratar datas vazias
   const tratarData = (data) => {
@@ -239,6 +275,47 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
                   onChange={e => setPranchaForm({...pranchaForm, assunto: e.target.value})}
                   style={{width:'100%',padding:'0.6rem 0.85rem',borderRadius:'var(--radius-lg)',background:'var(--color-surface-2)',color:'var(--color-text)',border:'1px solid var(--color-border)',fontSize:'0.875rem',outline:'none',boxSizing:'border-box'}} />
               </div>
+              {/* Requerimento de instalação à GLEMT */}
+              <div style={{border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',padding:'0.8rem',background:'var(--color-surface-2)'}}>
+                <label style={{fontSize:'0.72rem',fontWeight:'700',color:'var(--color-accent)',textTransform:'uppercase',letterSpacing:'0.05em',display:'block',marginBottom:'0.35rem'}}>
+                  📜 Requerimento de Instalação à GLEMT (opcional)
+                </label>
+                <p style={{margin:'0 0 0.5rem',fontSize:'0.72rem',color:'var(--color-text-muted)'}}>
+                  Escolha a eleição: o texto puxa o edital, o balaústre, as datas e o Venerável eleito.
+                </p>
+                <select value={eleicaoPrancha} onChange={e => {
+                    setEleicaoPrancha(e.target.value);
+                    const el = eleicoes.find(x => String(x.id) === e.target.value);
+                    if (el) setPranchaForm(p => ({
+                      ...p,
+                      numero_prancha: p.numero_prancha || proximoNumero(),
+                      data_prancha: p.data_prancha || new Date().toISOString().substring(0, 10),
+                      destinatario: p.destinatario || 'Grande Loja Maçônica do Estado de Mato Grosso – GLEMT',
+                      assunto: p.assunto || `Requerimento de Comissão Instaladora — Gestão ${el.gestao || ''}`,
+                    }));
+                  }}
+                  style={{width:'100%',padding:'0.55rem 0.8rem',borderRadius:'var(--radius-lg)',background:'var(--color-surface)',color:'var(--color-text)',border:'1px solid var(--color-border)',fontSize:'0.88rem',outline:'none'}}>
+                  <option value="">Prancha comum (sem requerimento)</option>
+                  {eleicoes.map(el => (
+                    <option key={el.id} value={el.id}>
+                      Gestão {el.gestao} — eleição de {formatarData(el.data_eleicao)}
+                    </option>
+                  ))}
+                </select>
+                {eleicaoPrancha && (
+                  <div style={{display:'flex',gap:'0.5rem',marginTop:'0.6rem'}}>
+                    <button type="button" disabled={!!gerandoDoc} onClick={() => gerarPrancha('docx')}
+                      style={{flex:1,height:'36px',background:'var(--color-surface)',color:'var(--color-text)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.8rem',cursor:'pointer'}}>
+                      {gerandoDoc === 'docx' ? 'Gerando...' : '📄 Gerar Word'}
+                    </button>
+                    <button type="button" disabled={!!gerandoDoc} onClick={() => gerarPrancha('pdf')}
+                      style={{flex:1,height:'36px',background:'var(--color-surface)',color:'var(--color-text)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.8rem',cursor:'pointer'}}>
+                      {gerandoDoc === 'pdf' ? 'Gerando...' : '📕 Gerar PDF'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div style={{display:'flex',gap:'0.65rem',paddingTop:'0.25rem'}}>
                 <button type="button" onClick={limparFormulario}
                   style={{flex:1,height:'40px',background:'var(--color-surface-2)',color:'var(--color-text)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.85rem',cursor:'pointer'}}>
@@ -257,7 +334,7 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
       {/* BOTÃO NOVA PRANCHA */}
       {permissoes?.pode_editar_pranchas && (
         <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'0.75rem'}}>
-          <button onClick={() => { limparFormulario(); setModalAberto(true); }}
+          <button onClick={() => { limparFormulario(); setEleicaoPrancha(''); setPranchaForm(p => ({ ...p, numero_prancha: proximoNumero(), data_prancha: new Date().toISOString().substring(0, 10) })); setModalAberto(true); }}
             style={{height:'38px',padding:'0 1rem',background:'var(--color-accent)',color:'#fff',border:'none',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.82rem',cursor:'pointer',display:'flex',alignItems:'center',gap:'0.4rem'}}>
             ➕ Nova Prancha
           </button>
