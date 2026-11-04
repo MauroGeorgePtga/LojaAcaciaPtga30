@@ -1114,7 +1114,12 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
   const [formRegistro, setFormRegistro] = useState({ registro_numero: '', registro_averbacao: '', registro_data: '' });
   // Retorna true quando a ação está liberada; senão mostra o aviso
   // Campos da POSSE continuam livres quando só a eleição foi encerrada
-  const CAMPOS_POSSE = ['data_edital_posse', 'data_posse', 'hora_posse'];
+  const CAMPOS_POSSE = ['data_edital_posse', 'data_posse', 'hora_posse',
+    'vm_instalador_id', 'primeiro_vigilante_instalador_id', 'segundo_vigilante_instalador_id',
+    'orador_instalador_id', 'secretario_instalador_id'];
+  // Campos que não pertencem ao pleito: continuam editáveis mesmo com a eleição encerrada
+  const CAMPOS_LIVRES = ['req_eleicao_data', 'req_posse_data', 'req_eleicao_assinante_id', 'req_posse_assinante_id',
+    'req_eleicao_modo', 'req_posse_modo'];
   const campoTravado = (key) => (CAMPOS_POSSE.includes(key) ? posseTravada : eleicaoTravada);
 
   const liberado = (etapa = 'eleicao') => {
@@ -1298,8 +1303,10 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
     const LIVRES = ['eleicao_encerrada', 'eleicao_encerrada_em',
       'posse_encerrada', 'posse_encerrada_em',
       'registro_numero', 'registro_averbacao', 'registro_data', 'status'];
-    const mexeNoPosse = Object.keys(campos).some(k => /posse/.test(k) && !LIVRES.includes(k));
-    const soLivres = Object.keys(campos).every(k => LIVRES.includes(k));
+    const chaves = Object.keys(campos);
+    // Instaladores, datas da posse e requerimentos não travam com a eleição
+    const mexeNoPosse = chaves.some(k => (CAMPOS_POSSE.includes(k) || /posse/.test(k)) && !LIVRES.includes(k));
+    const soLivres = chaves.every(k => LIVRES.includes(k) || CAMPOS_LIVRES.includes(k));
     if (!soLivres && !liberado(mexeNoPosse ? 'posse' : 'eleicao')) return;
     setLoadingAcao(true);
     // Sanitiza strings vazias em campos BIGINT e DATE
