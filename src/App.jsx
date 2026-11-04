@@ -2001,6 +2001,7 @@ ${filho.falecido ? `<div class="info-item"><span class="info-label">Status:</spa
         {currentPage === 'balaustres' && (
           <Balaustres
             balaustres={balaustres}
+            userData={userData}
             tiposSessao={tiposSessao}
             session={session}
             onUpdate={() => loadBalaustres()}
