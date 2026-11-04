@@ -1113,6 +1113,10 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
   const [editandoRegistro, setEditandoRegistro] = useState(false);
   const [formRegistro, setFormRegistro] = useState({ registro_numero: '', registro_averbacao: '', registro_data: '' });
   // Retorna true quando a ação está liberada; senão mostra o aviso
+  // Campos da POSSE continuam livres quando só a eleição foi encerrada
+  const CAMPOS_POSSE = ['data_edital_posse', 'data_posse', 'hora_posse'];
+  const campoTravado = (key) => (CAMPOS_POSSE.includes(key) ? posseTravada : eleicaoTravada);
+
   const liberado = (etapa = 'eleicao') => {
     const travada = etapa === 'posse' ? posseTravada : eleicaoTravada;
     if (travada) { setAvisoTrava(etapa); return false; }
@@ -2177,7 +2181,7 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
                     {g.campos.map(f => (
                       <div key={f.key}>
                         <label style={S.label}>{f.label}</label>
-                        <input type={f.type} style={S.input} disabled={!podeEditar || eleicaoTravada} placeholder={f.placeholder}
+                        <input type={f.type} style={S.input} disabled={!podeEditar || campoTravado(f.key)} placeholder={f.placeholder}
                           value={eleicaoSelecionada[f.key] || ''}
                           onChange={e => setEleicaoSelecionada(p => ({ ...p, [f.key]: e.target.value }))}
                           onBlur={e => podeEditar && atualizarEleicao({ [f.key]: e.target.value || null })}
@@ -2201,14 +2205,14 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
                       <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-text)', alignSelf: 'center' }}>{titulo}</div>
                       <div>
                         <label style={S.label}>Data de Emissão</label>
-                        <input type="date" style={S.input} disabled={!podeEditar || eleicaoTravada}
+                        <input type="date" style={S.input} disabled={!podeEditar}
                           value={eleicaoSelecionada[`req_${qual}_data`] || ''}
                           onChange={e => setEleicaoSelecionada(p => ({ ...p, [`req_${qual}_data`]: e.target.value }))}
                           onBlur={e => podeEditar && atualizarEleicao({ [`req_${qual}_data`]: e.target.value || null })} />
                       </div>
                       <div>
                         <label style={S.label}>Quem Assina</label>
-                        <select style={S.input} disabled={!podeEditar || eleicaoTravada} value={modo}
+                        <select style={S.input} disabled={!podeEditar} value={modo}
                           onChange={e => salvar({ [`req_${qual}_assinante`]: e.target.value, ...(e.target.value !== 'outro' ? { [`req_${qual}_assinante_id`]: null } : {}) })}>
                           <option value="auto">Automático (pela data)</option>
                           <option value="sainte">VM Sainte</option>
@@ -2219,7 +2223,7 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
                       {modo === 'outro' && (
                         <div>
                           <label style={S.label}>Irmão</label>
-                          <select style={S.input} disabled={!podeEditar || eleicaoTravada} value={eleicaoSelecionada[`req_${qual}_assinante_id`] || ''}
+                          <select style={S.input} disabled={!podeEditar} value={eleicaoSelecionada[`req_${qual}_assinante_id`] || ''}
                             onChange={e => salvar({ [`req_${qual}_assinante_id`]: e.target.value || null })}>
                             <option value="">Selecione...</option>
                             {irmaosRegularesHoje.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
@@ -2316,7 +2320,7 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
                   ].map(f => (
                     <div key={f.key}>
                       <label style={S.label}>{f.label}</label>
-                      <select style={S.select} disabled={!podeEditar || eleicaoTravada}
+                      <select style={S.select} disabled={!podeEditar || posseTravada}
                         value={eleicaoSelecionada[f.key] || ''}
                         onChange={e => { setEleicaoSelecionada(p => ({ ...p, [f.key]: e.target.value })); podeEditar && atualizarEleicao({ [f.key]: e.target.value || null }); }}
                       >
