@@ -1021,7 +1021,7 @@ const STATUS_INFO = {
 // COMPONENTE PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
 
-export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showError, podeEditarModelos = false, onAbrirModelos, onAbrirBalaustres }) {
+export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess, showError, podeEditarModelos = false, onAbrirModelos, onAbrirBalaustres }) {
   const CHAVE_RETORNO = 'eleicao_posse_retorno';
   const temAcesso = permissoes?.canManageUsers || permissoes?.canEditFinancial || permissoes?.canEdit || false;
 
@@ -1099,6 +1099,25 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   const [chapaVencedora, setChapaVencedora] = useState('A');
 
   const podeEditar = permissoes?.pode_editar_corpo_admin || false;
+
+  // ── Travas do processo eleitoral ───────────────────────────────────────
+  // Encerrada a eleição, nada do pleito muda; encerrada a posse, o resto também não.
+  // Só Admin e Venerável encerram ou liberam.
+  const ehAdmin = String(userData?.nivel_acesso || '').toLowerCase() === 'admin';
+  const semAcento = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const cargoUsuario = semAcento(userData?.cargo);
+  const podeLiberar = ehAdmin || cargoUsuario.includes('veneravel') || cargoUsuario.includes('secretario');
+  const eleicaoTravada = !!eleicaoSelecionada?.eleicao_encerrada;
+  const posseTravada = !!eleicaoSelecionada?.posse_encerrada;
+  const [avisoTrava, setAvisoTrava] = useState(null);   // 'eleicao' | 'posse'
+  const [editandoRegistro, setEditandoRegistro] = useState(false);
+  const [formRegistro, setFormRegistro] = useState({ registro_numero: '', registro_averbacao: '', registro_data: '' });
+  // Retorna true quando a ação está liberada; senão mostra o aviso
+  const liberado = (etapa = 'eleicao') => {
+    const travada = etapa === 'posse' ? posseTravada : eleicaoTravada;
+    if (travada) { setAvisoTrava(etapa); return false; }
+    return true;
+  };
   // Listas de escolha: somente irmãos REGULARES na data da eleição (fora falecidos,
   // desligados, irregulares e licenciados). Quem já foi escolhido nesta eleição
   // continua na lista, com aviso se hoje não estiver regular.
@@ -1263,6 +1282,13 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
 
   const atualizarEleicao = async (campos) => {
     if (!eleicaoSelecionada) return;
+    // Campos de controle continuam editáveis (travar/liberar, status, registro em cartório)
+    const LIVRES = ['eleicao_encerrada', 'eleicao_encerrada_em',
+      'posse_encerrada', 'posse_encerrada_em',
+      'registro_numero', 'registro_averbacao', 'registro_data', 'status'];
+    const mexeNoPosse = Object.keys(campos).some(k => /posse/.test(k) && !LIVRES.includes(k));
+    const soLivres = Object.keys(campos).every(k => LIVRES.includes(k));
+    if (!soLivres && !liberado(mexeNoPosse ? 'posse' : 'eleicao')) return;
     setLoadingAcao(true);
     // Sanitiza strings vazias em campos BIGINT e DATE
     const camposSanitizados = Object.fromEntries(
@@ -1295,6 +1321,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   };
 
   const salvarChapas = async () => {
+    if (!liberado('eleicao')) return;     // chapa faz parte do pleito
     setLoadingAcao(true);
     try {
       // Remove chapas antigas — e confere: se o banco não apagar, não insere de novo (evita cargos duplicados)
@@ -1339,6 +1366,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   // ── Presença ─────────────────────────────────────────────
 
   const togglePresenca = async (irmaoId, sessao) => {
+    if (!liberado(sessao === 'posse' ? 'posse' : 'eleicao')) return;
     const existe = presencas.find(p => p.irmao_id === irmaoId && p.sessao === sessao);
     try {
       if (existe) {
@@ -1406,6 +1434,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   const edDe = (posse) => editaisLoja[posse ? eleicaoSelecionada?.edital_posse_id : eleicaoSelecionada?.edital_eleicao_id] || null;
   const emitirEditalLoja = async (posse, dataEdital) => {
     if (!eleicaoSelecionada) return;
+    if (!liberado(posse ? 'posse' : 'eleicao')) return;
     if (!dataEdital) { showError('Preencha a Data do edital na Configuração antes de emitir.'); return; }
     const chave = posse ? 'posse' : 'eleicao';
     setEmitindoEdital(chave);
@@ -1433,6 +1462,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   // Vincula um edital já cadastrado (em vez de emitir outro)
   const vincularEditalLoja = async (posse, ed) => {
     if (!eleicaoSelecionada || emitindoEdital) return;
+    if (!liberado(posse ? 'posse' : 'eleicao')) return;
     setEmitindoEdital(posse ? 'posse' : 'eleicao');
     try {
       const { data: e1, error: er1 } = await supabase.from('editais')
@@ -1455,6 +1485,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   };
   // Desfaz o vínculo (o edital continua cadastrado e fica livre para outro uso)
   const desvincularEditalLoja = async (posse) => {
+    if (!liberado(posse ? 'posse' : 'eleicao')) return;
     const ed = edDe(posse);
     if (!ed || emitindoEdital) return;
     if (!window.confirm(`Desvincular o edital nº ${formatarNumeroEdital(ed.numero, ed.ano)}?\nEle continua em Editais e o documento fica bloqueado até vincular/emitir outro.`)) return;
@@ -1990,6 +2021,7 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
   const aptidaoPorIrmao = Object.fromEntries(aptidao.linhas.map(l => [String(l.irmao.id), l]));
 
   const ajustarAptidao = async (linha) => {
+    if (!liberado('eleicao')) return;     // aptidão é do pleito
     const atuais = { ...(eleicaoSelecionada.aptidao_ajustes || {}) };
     if (linha.ajuste) {
       delete atuais[String(linha.irmao.id)];
@@ -2002,6 +2034,25 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
     setEleicaoSelecionada(e => ({ ...e, aptidao_ajustes: atuais }));
     setAptidao(a => ({ ...a, linhas: a.linhas.map(l => (l.irmao.id === linha.irmao.id
       ? { ...l, ajuste: atuais[String(l.irmao.id)], apto: atuais[String(l.irmao.id)] ? true : l.aptoAuto } : l)) }));
+  };
+
+  // Encerrar / liberar o processo (Admin e Venerável)
+  const encerrarEtapa = async (etapa) => {
+    if (!podeLiberar) { setAvisoTrava(etapa); return; }
+    const nome = etapa === 'posse' ? 'a POSSE' : 'a ELEIÇÃO';
+    if (!window.confirm(`Encerrar ${nome}?\nOs dados ficam bloqueados e só o Venerável ou o Admin podem liberar.`)) return;
+    await atualizarEleicao(etapa === 'posse'
+      ? { posse_encerrada: true, posse_encerrada_em: new Date().toISOString() }
+      : { eleicao_encerrada: true, eleicao_encerrada_em: new Date().toISOString() });
+    showSuccess(`🔒 ${etapa === 'posse' ? 'Posse' : 'Eleição'} encerrada.`);
+  };
+  const liberarEtapa = async (etapa) => {
+    if (!podeLiberar) { setAvisoTrava(etapa); return; }
+    const nome = etapa === 'posse' ? 'a POSSE' : 'a ELEIÇÃO';
+    if (!window.confirm(`Liberar ${nome} para edição?`)) return;
+    await atualizarEleicao(etapa === 'posse' ? { posse_encerrada: false } : { eleicao_encerrada: false });
+    setAvisoTrava(null);
+    showSuccess('🔓 Liberado para edição.');
   };
 
   const ETAPAS = [
@@ -2024,14 +2075,55 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
               ⚖️ Gestão {eleicaoSelecionada.gestao}
             </h2>
             <span style={S.badge(st.cor)}>{st.emoji} {st.label}</span>
+
+            {/* Dados do registro em Cartório, logo após o status */}
+            {eleicaoSelecionada.status === 'registrado_cartorio' && (
+              <span style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                {eleicaoSelecionada.registro_numero ? `Registro ${eleicaoSelecionada.registro_numero}` : 'sem nº de registro'}
+                {eleicaoSelecionada.registro_averbacao ? ` · Averbação ${eleicaoSelecionada.registro_averbacao}` : ''}
+                {eleicaoSelecionada.registro_data ? ` · ${formatarData(eleicaoSelecionada.registro_data)}` : ''}
+                {podeEditar && (
+                  <button onClick={() => { setFormRegistro({
+                      registro_numero: eleicaoSelecionada.registro_numero || '',
+                      registro_averbacao: eleicaoSelecionada.registro_averbacao || '',
+                      registro_data: eleicaoSelecionada.registro_data || '',
+                    }); setEditandoRegistro(true); }}
+                    style={{ marginLeft: '0.4rem', background: 'transparent', border: 'none', color: 'var(--color-accent)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>
+                    editar
+                  </button>
+                )}
+              </span>
+            )}
+
+            {/* Travas do processo */}
+            {eleicaoTravada && (
+              <span style={{ ...S.badge('gold'), display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                🔒 Eleição encerrada{eleicaoSelecionada.eleicao_encerrada_em ? ` em ${formatarData(eleicaoSelecionada.eleicao_encerrada_em)}` : ''}
+                {podeLiberar && <button onClick={() => liberarEtapa('eleicao')} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>liberar</button>}
+              </span>
+            )}
+            {posseTravada && (
+              <span style={{ ...S.badge('gold'), display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                🔒 Posse encerrada{eleicaoSelecionada.posse_encerrada_em ? ` em ${formatarData(eleicaoSelecionada.posse_encerrada_em)}` : ''}
+                {podeLiberar && <button onClick={() => liberarEtapa('posse')} style={{ background: 'transparent', border: 'none', color: 'inherit', fontWeight: 800, cursor: 'pointer', textDecoration: 'underline' }}>liberar</button>}
+              </span>
+            )}
           </div>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
             {eleicaoSelecionada.tipo_votacao === 'aclamacao' ? 'Chapa Única — Aclamação' : 'Disputa entre Chapas'}
           </p>
         </div>
-        {eleicaoSelecionada.status === 'posse_realizada' && podeEditar && (
-          <button style={S.btn('success')} onClick={marcarRegistrado}>🏛️ Marcar Registrado em Cartório</button>
-        )}
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {podeLiberar && !eleicaoTravada && (
+            <button style={S.btn('surface')} onClick={() => encerrarEtapa('eleicao')}>🔒 Encerrar eleição</button>
+          )}
+          {podeLiberar && !posseTravada && eleicaoSelecionada.status === 'posse_realizada' && (
+            <button style={S.btn('surface')} onClick={() => encerrarEtapa('posse')}>🔒 Encerrar posse</button>
+          )}
+          {eleicaoSelecionada.status === 'posse_realizada' && podeEditar && (
+            <button style={S.btn('success')} onClick={marcarRegistrado}>🏛️ Marcar Registrado em Cartório</button>
+          )}
+        </div>
       </div>
 
       {/* Stepper */}
@@ -2729,6 +2821,66 @@ export default function EleicaoPosse({ permissoes, irmaos, showSuccess, showErro
 
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <button style={S.btn('surface')} onClick={() => setEtapa(3)}>← Voltar</button>
+          </div>
+        </div>
+      )}
+
+      {/* Aviso: processo encerrado */}
+      {avisoTrava && (
+        <div onClick={() => setAvisoTrava(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', width: '100%', maxWidth: '460px', padding: '1.25rem' }}>
+            <h3 style={{ margin: '0 0 0.6rem', fontSize: '1rem', fontWeight: 800, color: '#f59e0b' }}>🔒 Processo encerrado</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.88rem', color: 'var(--color-text)' }}>
+              {avisoTrava === 'posse' ? 'A posse já foi encerrada.' : 'O processo eleitoral já foi encerrado.'}
+              {' '}Alterações dependem de autorização do Venerável Mestre.
+            </p>
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <button onClick={() => setAvisoTrava(null)} style={{ flex: 1, ...S.btn('surface') }}>Entendi</button>
+              {podeLiberar && (
+                <button onClick={() => liberarEtapa(avisoTrava)} style={{ flex: 1, ...S.btn('success') }}>🔓 Liberar para edição</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dados do registro em Cartório */}
+      {editandoRegistro && (
+        <div onClick={() => setEditandoRegistro(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', width: '100%', maxWidth: '480px', padding: '1.25rem' }}>
+            <h3 style={{ margin: '0 0 0.9rem', fontSize: '1rem', fontWeight: 800, color: 'var(--color-text)' }}>🏛️ Registro em Cartório</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.7rem', marginBottom: '0.7rem' }}>
+              <div>
+                <label style={S.label}>Registro nº</label>
+                <input style={S.input} value={formRegistro.registro_numero}
+                  onChange={e => setFormRegistro(p => ({ ...p, registro_numero: e.target.value }))} placeholder="Ex.: 1.234 do Livro A-02" />
+              </div>
+              <div>
+                <label style={S.label}>Averbação nº</label>
+                <input style={S.input} value={formRegistro.registro_averbacao}
+                  onChange={e => setFormRegistro(p => ({ ...p, registro_averbacao: e.target.value }))} placeholder="Ex.: 02" />
+              </div>
+            </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={S.label}>Data do registro</label>
+              <input type="date" style={S.input} value={formRegistro.registro_data || ''}
+                onChange={e => setFormRegistro(p => ({ ...p, registro_data: e.target.value }))} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem' }}>
+              <button onClick={() => setEditandoRegistro(false)} style={{ flex: 1, ...S.btn('surface') }}>Cancelar</button>
+              <button style={{ flex: 2, ...S.btn('success') }}
+                onClick={async () => {
+                  await atualizarEleicao({
+                    registro_numero: formRegistro.registro_numero.trim() || null,
+                    registro_averbacao: formRegistro.registro_averbacao.trim() || null,
+                    registro_data: formRegistro.registro_data || null,
+                  });
+                  setEditandoRegistro(false);
+                  showSuccess('Dados do registro salvos!');
+                }}>
+                Salvar
+              </button>
+            </div>
           </div>
         </div>
       )}
