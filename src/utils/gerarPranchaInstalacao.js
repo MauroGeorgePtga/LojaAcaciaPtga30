@@ -51,7 +51,7 @@ export const dadosDaEleicao = async (eleicaoId) => {
   const ids = [vmEleitoId, el.vm_sainte_id,
     el.vm_instalador_id, el.primeiro_vigilante_instalador_id, el.segundo_vigilante_instalador_id].filter(Boolean);
   const { data: irmaos } = ids.length
-    ? await supabase.from('irmaos').select('id, nome').in('id', ids) : { data: [] };
+    ? await supabase.from('irmaos').select('id, nome, cim').in('id', ids) : { data: [] };
   const nomeDe = (id) => (irmaos || []).find(i => String(i.id) === String(id))?.nome || '';
 
   // Venerável da gestão ATUAL (assina a prancha quando a eleição não tem VM sainte)
@@ -91,7 +91,14 @@ export const dadosDaEleicao = async (eleicaoId) => {
     numero_edital: edital ? `${String(edital.numero).padStart(2, '0')}/${edital.ano}` : '[nº]',
     data_edital: dataBR(edital?.data_edital || el.data_edital_eleicao),
     numero_balaustre: balaustre ? `${balaustre.numero_balaustre}/${balaustre.ano_balaustre}` : '[nº]',
-    vm_eleito: nomeDe(vmEleitoId) || '[Venerável eleito]',
+    // Nome do eleito com o CIM: "Fulano de Tal - CIM nº 1234"
+    vm_eleito: (() => {
+      const ir = (irmaos || []).find(i => String(i.id) === String(vmEleitoId));
+      if (!ir) return '[Venerável eleito]';
+      return ir.cim ? `${ir.nome} - CIM nº ${ir.cim}` : ir.nome;
+    })(),
+    vm_eleito_nome: nomeDe(vmEleitoId) || '[Venerável eleito]',
+    vm_eleito_cim: ((irmaos || []).find(i => String(i.id) === String(vmEleitoId)) || {}).cim || '',
     vm_sainte: nomeDe(el.vm_sainte_id) || vmAtualNome || '[Venerável Mestre]',
     // Comissão Instaladora (quadro "Instaladores — Ata de Posse")
     vm_instalador: nomeDe(el.vm_instalador_id) || '',
