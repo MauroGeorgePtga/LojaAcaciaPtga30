@@ -189,14 +189,16 @@ export const gerarPranchaInstalacaoPDF = ({ prancha, V, corpo, titulo }) => {
   y += 8;
 
   doc.setFont('times', 'bold'); doc.setFontSize(11); doc.setTextColor(...TEXTO);
-  doc.text(`Prancha nº ${prancha.numero_prancha || ''}`, W - M, y, { align: 'right' });
+  doc.text(`Prancha nº ${prancha.numero_prancha || ''}`, M, y);
   y += 10;
   doc.setFontSize(13); doc.setTextColor(...AZUL);
   doc.text(pdfTexto(interp(titulo || 'REQUERIMENTO DE COMISSÃO INSTALADORA', V)), W / 2, y, { align: 'center' });
   y += 7;
   doc.setFontSize(11); doc.setTextColor(...TEXTO);
-  doc.text(pdfTexto(`Ao Sereníssimo Grão-Mestre, Ir.·. ${V.grao_mestre}`), W / 2, y, { align: 'center' }); y += 6;
-  doc.text('Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', W / 2, y, { align: 'center' }); y += 6;
+  doc.setFont('times', 'bold');
+  doc.text(pdfTexto(`Ao Sereníssimo Grão-Mestre, Ir.·. ${V.grao_mestre}`), M, y); y += 6;
+  doc.text('Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', M, y); y += 6;
+  doc.setFont('times', 'normal');
   y += 6;
 
   doc.setFont('times', 'normal'); doc.setFontSize(11.5);
@@ -205,15 +207,22 @@ export const gerarPranchaInstalacaoPDF = ({ prancha, V, corpo, titulo }) => {
     const soNegrito = /^\*[^*]+\*$/.test(p.trim());
     const ehItemComissao = /Instalador:/.test(p);
     doc.setFont('times', soNegrito ? 'bold' : 'normal');
-    const ls = doc.splitTextToSize(pdfTexto(p.replace(/\*/g, '')), W - 2 * M - (ehItemComissao ? 8 : 0));
+    const larg = W - 2 * M;
+    const ls = doc.splitTextToSize(pdfTexto(p.replace(/\*/g, '')), larg);
     const ultima = ls.pop();
     if (ls.length) {
       if (y + ls.length * 5.6 > H - 60) { doc.addPage(); y = 20; }
-      doc.text(ls, M, y, { maxWidth: W - 2 * M, align: 'justify', lineHeightFactor: 1.35 });
-      y += ls.length * 5.6;
+      // justificado: só as linhas cheias (a última sai alinhada à esquerda)
+      ls.forEach((linha) => {
+        doc.text(linha, M, y, { maxWidth: larg, align: ehItemComissao || soNegrito ? 'left' : 'justify' });
+        y += 5.6;
+      });
     }
     if (y > H - 60) { doc.addPage(); y = 20; }
-    doc.text(ultima, M + (ehItemComissao ? 8 : 0), y); y += 5.6 + (ehItemComissao ? 1 : 3.4);
+    doc.text(ultima, M, y);
+    // espaço extra depois do último nome da Comissão Instaladora
+    const proximoEhTexto = ehItemComissao && /2º Vigilante/.test(p);
+    y += 5.6 + (ehItemComissao ? (proximoEhTexto ? 6 : 1) : 3.4);
     doc.setFont('times', 'normal');
   });
 
