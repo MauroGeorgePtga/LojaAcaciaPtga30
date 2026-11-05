@@ -193,7 +193,7 @@ export const gerarPranchaInstalacaoPDF = ({ prancha, V, corpo, titulo }) => {
   y += 10;
   doc.setFontSize(13); doc.setTextColor(...AZUL);
   doc.text(pdfTexto(interp(titulo || 'REQUERIMENTO DE COMISSÃO INSTALADORA', V)), W / 2, y, { align: 'center' });
-  y += 7;
+  y += 13;   // respiro entre o título e o destinatário
   doc.setFontSize(11); doc.setTextColor(...TEXTO);
   doc.setFont('times', 'bold');
   doc.text(pdfTexto(`Ao Sereníssimo Grão-Mestre, Ir.·. ${V.grao_mestre}`), M, y); y += 6;
@@ -202,28 +202,69 @@ export const gerarPranchaInstalacaoPDF = ({ prancha, V, corpo, titulo }) => {
   y += 6;
 
   doc.setFont('times', 'normal'); doc.setFontSize(11.5);
-  interp(corpo || CORPO_PADRAO_INSTALACAO, V).split('\n').filter(l => l.trim() !== '').forEach((p) => {
-    // Linhas da Comissão Instaladora e trechos entre *...* saem em negrito
-    const soNegrito = /^\*[^*]+\*$/.test(p.trim());
-    const ehItemComissao = /Instalador:/.test(p);
-    doc.setFont('times', soNegrito ? 'bold' : 'normal');
+  // Parágrafo com *negrito* no meio: quebra em linhas e desenha trecho a trecho.
+  // Sem negrito, usa a justificação do próprio jsPDF (mais fiel ao Word).
+  const escreverParagrafo = (texto, { negritoTudo = false, justificar = true } = {}) => {
     const larg = W - 2 * M;
-    const ls = doc.splitTextToSize(pdfTexto(p.replace(/\*/g, '')), larg);
-    const ultima = ls.pop();
-    if (ls.length) {
-      if (y + ls.length * 5.6 > H - 60) { doc.addPage(); y = 20; }
-      // justificado: só as linhas cheias (a última sai alinhada à esquerda)
-      ls.forEach((linha) => {
-        doc.text(linha, M, y, { maxWidth: larg, align: ehItemComissao || soNegrito ? 'left' : 'justify' });
+    const temNegrito = /\*[^*]+\*/.test(texto);
+    const limpo = pdfTexto(String(texto).replace(/\*/g, ''));
+
+    if (!temNegrito) {
+      doc.setFont('times', negritoTudo ? 'bold' : 'normal');
+      const ls = doc.splitTextToSize(limpo, larg);
+      ls.forEach((linha, i) => {
+        if (y > H - 60) { doc.addPage(); y = 20; }
+        const ultima = i === ls.length - 1;
+        doc.text(linha, M, y, justificar && !ultima ? { maxWidth: larg, align: 'justify' } : undefined);
         y += 5.6;
       });
+      doc.setFont('times', 'normal');
+      return;
     }
-    if (y > H - 60) { doc.addPage(); y = 20; }
-    doc.text(ultima, M, y);
-    // espaço extra depois do último nome da Comissão Instaladora
-    const proximoEhTexto = ehItemComissao && /2º Vigilante/.test(p);
-    y += 5.6 + (ehItemComissao ? (proximoEhTexto ? 6 : 1) : 3.4);
+
+    // Marca onde começa e termina o negrito e quebra o texto normalmente
+    const partes = String(texto).split(/(\*[^*]+\*)/).filter(Boolean);
+    const negritoDe = [];   // posição inicial e final de cada trecho em negrito
+    let pos = 0;
+    partes.forEach((t) => {
+      // mede sobre o texto JÁ convertido (pdfTexto troca ∴ por .·., mudando o tamanho)
+      const txt = pdfTexto(t.startsWith('*') && t.endsWith('*') ? t.slice(1, -1) : t);
+      if (t.startsWith('*')) negritoDe.push([pos, pos + txt.length]);
+      pos += txt.length;
+    });
+    const emNegrito = (i) => negritoDe.some(([a, b]) => i >= a && i < b);
+
     doc.setFont('times', 'normal');
+    const ls = doc.splitTextToSize(limpo, larg);
+    let lido = 0;
+    ls.forEach((linha) => {
+      // posiciona o índice no início desta linha dentro do texto completo
+      while (lido < limpo.length && limpo[lido] !== linha[0] && /\s/.test(limpo[lido])) lido += 1;
+      if (y > H - 60) { doc.addPage(); y = 20; }
+      // desenha caractere a caractere agrupando por estilo
+      let x = M, bufer = '', bold = emNegrito(lido);
+      for (let k = 0; k < linha.length; k++) {
+        const b = emNegrito(lido + k);
+        if (b !== bold) {
+          doc.setFont('times', bold ? 'bold' : 'normal');
+          doc.text(bufer, x, y); x += doc.getTextWidth(bufer);
+          bufer = ''; bold = b;
+        }
+        bufer += linha[k];
+      }
+      doc.setFont('times', bold ? 'bold' : 'normal');
+      doc.text(bufer, x, y);
+      lido += linha.length;
+      y += 5.6;
+    });
+    doc.setFont('times', 'normal');
+  };
+
+  interp(corpo || CORPO_PADRAO_INSTALACAO, V).split('\n').filter(l => l.trim() !== '').forEach((p) => {
+    const soNegrito = /^\*[^*]+\*$/.test(p.trim());
+    const ehItemComissao = /Instalador:/.test(p);
+    escreverParagrafo(p, { negritoTudo: soNegrito, justificar: !soNegrito && !ehItemComissao });
+    y += ehItemComissao ? (/2º Vigilante/.test(p) ? 6 : 1) : 3.4;
   });
 
   if (y > H - 50) { doc.addPage(); y = 24; }
