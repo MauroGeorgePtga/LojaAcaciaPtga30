@@ -58,16 +58,19 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
   };
 
   // Gera a prancha (Word ou PDF) com os dados da eleição escolhida
-  const gerarPrancha = async (formato) => {
-    if (!eleicaoPrancha) { showError('Escolha a eleição de referência.'); return; }
-    if (!pranchaForm.numero_prancha || !pranchaForm.data_prancha) { showError('Preencha o número e a data da prancha.'); return; }
+  const gerarPrancha = async (formato, pranchaSalva = null) => {
+    // Da lista: usa a eleição gravada na própria prancha (sem reabrir o cadastro)
+    const idEleicao = pranchaSalva ? pranchaSalva.eleicao_id : eleicaoPrancha;
+    const dados = pranchaSalva || pranchaForm;
+    if (!idEleicao) { showError('Esta prancha não tem eleição de referência. Edite-a e escolha a gestão.'); return; }
+    if (!dados.numero_prancha || !dados.data_prancha) { showError('Preencha o número e a data da prancha.'); return; }
     setGerandoDoc(formato);
     try {
-      const V = await dadosDaEleicao(eleicaoPrancha);
+      const V = await dadosDaEleicao(idEleicao);
       // Usa o modelo cadastrado em Modelos de Documentos, se existir
       const { data: mod } = await supabase.from('modelos_documentos')
         .select('corpo, titulo_doc').eq('tipo', 'prancha_instalacao').maybeSingle();
-      const args = { prancha: pranchaForm, V, corpo: mod?.corpo || null, titulo: mod?.titulo_doc || null };
+      const args = { prancha: dados, V, corpo: mod?.corpo || null, titulo: mod?.titulo_doc || null };
       if (formato === 'pdf') gerarPranchaInstalacaoPDF(args);
       else await gerarPranchaInstalacaoDocx(args);
       showSuccess(`Prancha gerada em ${formato === 'pdf' ? 'PDF' : 'Word'}!`);
@@ -106,6 +109,7 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
 
     try {
       const dadosPrancha = {
+        eleicao_id: eleicaoPrancha || null,
         numero_prancha: pranchaForm.numero_prancha,
         data_prancha: tratarData(pranchaForm.data_prancha),
         assunto: pranchaForm.assunto,
@@ -137,6 +141,7 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
 
     try {
       const dadosPrancha = {
+        eleicao_id: eleicaoPrancha || null,
         numero_prancha: pranchaForm.numero_prancha,
         data_prancha: tratarData(pranchaForm.data_prancha),
         assunto: pranchaForm.assunto,
@@ -164,6 +169,7 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
 
   // Editar prancha
   const handleEditar = (prancha) => {
+    setEleicaoPrancha(prancha.eleicao_id || '');
     setModoEdicao(true);
     setModalAberto(true);
     setPranchaEditando(prancha);
@@ -493,6 +499,14 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
                           <button onClick={() => handleVisualizar(prancha)}
                             style={{padding:'0.25rem 0.5rem',background:'rgba(16,185,129,0.15)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}
                             title="Visualizar">👁️</button>
+                            {prancha.eleicao_id && (<>
+                              <button onClick={() => gerarPrancha('docx', prancha)} disabled={!!gerandoDoc}
+                                style={{padding:'0.25rem 0.5rem',background:'rgba(59,130,246,0.15)',color:'#3b82f6',border:'1px solid rgba(59,130,246,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
+                                title="Gerar Word">📄</button>
+                              <button onClick={() => gerarPrancha('pdf', prancha)} disabled={!!gerandoDoc}
+                                style={{padding:'0.25rem 0.5rem',background:'rgba(239,68,68,0.12)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
+                                title="Gerar PDF">📕</button>
+                            </>)}
                           {permissoes?.pode_editar_pranchas && (<>
                             <button onClick={() => handleEditar(prancha)}
                               style={{padding:'0.25rem 0.5rem',background:'var(--color-accent-bg)',color:'var(--color-accent)',border:'1px solid var(--color-accent)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}>✏️</button>
