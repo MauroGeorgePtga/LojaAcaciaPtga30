@@ -81,6 +81,24 @@ const MODELOS_PADRAO = [
     alinhamento_titulo: 'center', alinhamento_corpo: 'justify', alinhamento_assinatura: 'center',
   },
   {
+    modulo: 'pranchas',
+    tipo: 'prancha_instalacao',
+    nome: 'Prancha — Requerimento de Instalação (GLEMT)',
+    titulo_doc: 'REQUERIMENTO PARA PROCESSO DE INSTALAÇÃO',
+    corpo: 'O Venerável Mestre da Augusta e Respeitável Loja Simbólica {nome_loja}, no uso de suas atribuições, '
+      + 'vem, respeitosamente, à presença de Vossa Sereníssima, requerer a designação de Comissão Instaladora '
+      + 'para a instalação e posse do Venerável Mestre eleito para a gestão {gestao}.\n'
+      + 'Os trabalhos eleitorais realizaram-se em Sessão Ordinária de Eleição no dia {data_eleicao}, '
+      + 'convocada pelo Edital nº {numero_edital}, de {data_edital}, e registrada no Balaústre nº {numero_balaustre}, '
+      + 'tendo sido eleito Venerável Mestre o Ir∴ *{vm_eleito}*.\n'
+      + 'A sessão de posse está prevista para o dia {data_posse}, às {hora_posse} horas, no Templo desta Oficina.\n'
+      + '{comissao_instaladora}\n'
+      + 'Na certeza do atendimento, renovamos os protestos de elevada estima e fraterno apreço.',
+    corpo_aclamacao: '', corpo_disputa: '', rodape: '',
+    assinatura_1_cargo: 'Venerável Mestre', assinatura_2_cargo: '', assinatura_3_cargo: '',
+    alinhamento_titulo: 'center', alinhamento_corpo: 'justify', alinhamento_assinatura: 'center',
+  },
+  {
     modulo: 'eleicao_posse',
     tipo: 'apresentacao_chapa',
     nome: 'Apresentação da Chapa',
@@ -324,6 +342,7 @@ const S = {
 // Módulos (grupos) da lista de modelos — novos módulos entram aqui
 const MODULOS_MODELOS = {
   eleicao_posse: '🗳️ Eleição e Posse',
+  pranchas: '📜 Pranchas',
   balaustres: '📜 Balaustres (Atas de Sessão)',
   financeiro: '💰 Financeiro',
   filantropia: '🤝 Filantropia',
