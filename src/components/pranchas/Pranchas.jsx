@@ -64,7 +64,10 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
     setGerandoDoc(formato);
     try {
       const V = await dadosDaEleicao(eleicaoPrancha);
-      const args = { prancha: pranchaForm, V, corpo: null, titulo: null };
+      // Usa o modelo cadastrado em Modelos de Documentos, se existir
+      const { data: mod } = await supabase.from('modelos_documentos')
+        .select('corpo, titulo_doc').eq('tipo', 'prancha_instalacao').maybeSingle();
+      const args = { prancha: pranchaForm, V, corpo: mod?.corpo || null, titulo: mod?.titulo_doc || null };
       if (formato === 'pdf') gerarPranchaInstalacaoPDF(args);
       else await gerarPranchaInstalacaoDocx(args);
       showSuccess(`Prancha gerada em ${formato === 'pdf' ? 'PDF' : 'Word'}!`);
