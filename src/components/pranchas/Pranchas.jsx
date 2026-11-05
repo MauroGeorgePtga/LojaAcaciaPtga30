@@ -426,7 +426,7 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
 
         <div>
           {/* Cabeçalho fixo das colunas */}
-          <div style={{display:'grid',gridTemplateColumns:'86px 86px 1fr 1.6fr 190px',gap:'0',background:'var(--color-surface-2)',borderBottom:'2px solid var(--color-accent)',padding:'0.5rem 1rem'}}>
+          <div style={{display:'grid',gridTemplateColumns:'80px 80px 1fr 1.2fr 240px',gap:'0',background:'var(--color-surface-2)',borderBottom:'2px solid var(--color-accent)',padding:'0.5rem 1rem'}}>
             {['Número','Data','Destinatário','Assunto','Ações'].map((h,i) => (
               <div key={h} style={{fontSize:'0.72rem',fontWeight:'700',color:'var(--color-text-muted)',textTransform:'uppercase',textAlign:i===4?'center':'left'}}>{h}</div>
             ))}
@@ -471,7 +471,7 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
                       <div key={prancha.id}
                         style={{
                           display:'grid',
-                          gridTemplateColumns:'86px 86px 1fr 1.6fr 190px',
+                          gridTemplateColumns:'80px 80px 1fr 1.2fr 240px',
                           gap:'0',
                           alignItems:'center',
                           borderLeft:'4px solid var(--color-accent)',
@@ -495,23 +495,23 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
                         <div style={{overflow:'hidden',paddingRight:'0.5rem'}}>
                           <p style={{fontSize:'0.82rem',color:'var(--color-text)',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{prancha.assunto}</p>
                         </div>
-                        <div style={{display:'flex',gap:'0.25rem',justifyContent:'flex-end',flexWrap:'wrap'}}>
+                        <div style={{display:'flex',gap:'0.22rem',justifyContent:'flex-end',flexWrap:'nowrap',whiteSpace:'nowrap',minWidth:0}}>
                           <button onClick={() => handleVisualizar(prancha)}
-                            style={{padding:'0.25rem 0.5rem',background:'rgba(16,185,129,0.15)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}
+                            style={{padding:'0.22rem 0.42rem',flexShrink:0,background:'rgba(16,185,129,0.15)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}
                             title="Visualizar">👁️</button>
                             {prancha.eleicao_id && (<>
                               <button onClick={() => gerarPrancha('docx', prancha)} disabled={!!gerandoDoc}
-                                style={{padding:'0.25rem 0.5rem',background:'rgba(59,130,246,0.15)',color:'#3b82f6',border:'1px solid rgba(59,130,246,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
+                                style={{padding:'0.22rem 0.42rem',flexShrink:0,background:'rgba(59,130,246,0.15)',color:'#3b82f6',border:'1px solid rgba(59,130,246,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
                                 title="Gerar Word">📄</button>
                               <button onClick={() => gerarPrancha('pdf', prancha)} disabled={!!gerandoDoc}
-                                style={{padding:'0.25rem 0.5rem',background:'rgba(239,68,68,0.12)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
+                                style={{padding:'0.22rem 0.42rem',flexShrink:0,background:'rgba(239,68,68,0.12)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
                                 title="Gerar PDF">📕</button>
                             </>)}
                           {permissoes?.pode_editar_pranchas && (<>
                             <button onClick={() => handleEditar(prancha)}
-                              style={{padding:'0.25rem 0.5rem',background:'var(--color-accent-bg)',color:'var(--color-accent)',border:'1px solid var(--color-accent)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}>✏️</button>
+                              style={{padding:'0.22rem 0.42rem',flexShrink:0,background:'var(--color-accent-bg)',color:'var(--color-accent)',border:'1px solid var(--color-accent)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}>✏️</button>
                             <button onClick={() => handleExcluir(prancha.id)}
-                              style={{padding:'0.25rem 0.5rem',background:'rgba(239,68,68,0.15)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}>🗑️</button>
+                              style={{padding:'0.22rem 0.42rem',flexShrink:0,background:'rgba(239,68,68,0.15)',color:'#ef4444',border:'1px solid rgba(239,68,68,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}>🗑️</button>
                           </>)}
                         </div>
                       </div>
