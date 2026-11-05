@@ -596,7 +596,9 @@ export default function ModelosDocumentos({ permissoes, showSuccess, showError, 
       <div style={{ width: '260px', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
         {!modulo && (
           <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
-            {[['eleicao_posse', '🗳️ Eleição e Posse'], ['balaustres', '📜 Balaustres']].map(([k, l]) => (
+            {[['eleicao_posse', '🗳️ Eleição e Posse'], ['balaustres', '📜 Balaustres'], ['pranchas', '📜 Pranchas']]
+              .filter(([k]) => k !== 'pranchas' || modelos.some(x => x.modulo === 'pranchas'))
+              .map(([k, l]) => (
               <button key={k} onClick={() => { setModuloAba(k); setModeloAtivo(null); setForm({}); }}
                 style={{ flex: 1, padding: '0.45rem 0.6rem', borderRadius: 'var(--radius-md)', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer',
                   border: `1px solid ${moduloAtivo === k ? 'var(--color-accent)' : 'var(--color-border)'}`,
