@@ -25,11 +25,31 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
   const [eleicoes, setEleicoes] = useState([]);
   const [eleicaoPrancha, setEleicaoPrancha] = useState('');
   const [gerandoDoc, setGerandoDoc] = useState('');
+  const [todasGestoes, setTodasGestoes] = useState(false);   // padrão: só a mais recente
+  const [instaladores, setInstaladores] = useState([]);
   useEffect(() => {
-    supabase.from('eleicoes').select('id, gestao, data_eleicao, data_posse')
+    supabase.from('eleicoes').select('*')
       .order('data_eleicao', { ascending: false })
       .then(({ data }) => setEleicoes(data || []));
   }, []);
+
+  // Instaladores da eleição escolhida (quadro "Instaladores — Ata de Posse")
+  useEffect(() => {
+    const el = eleicoes.find(x => String(x.id) === String(eleicaoPrancha));
+    if (!el) { setInstaladores([]); return; }
+    const mapa = [
+      ['Venerável Mestre Instalador', el.vm_instalador_id || el.vm_sainte_id],
+      ['1º Vigilante Instalador', el.primeiro_vigilante_instalador_id],
+      ['2º Vigilante Instalador', el.segundo_vigilante_instalador_id],
+      ['Orador Instalador', el.orador_instalador_id || el.orador_sainte_id],
+      ['Secretário Instalador', el.secretario_instalador_id || el.secretario_sainte_id],
+    ].filter(([, id]) => id);
+    if (!mapa.length) { setInstaladores([]); return; }
+    supabase.from('irmaos').select('id, nome').in('id', mapa.map(([, id]) => id))
+      .then(({ data }) => setInstaladores(mapa.map(([cargo, id]) => ({
+        cargo, nome: (data || []).find(i => String(i.id) === String(id))?.nome || '—',
+      }))));
+  }, [eleicaoPrancha, eleicoes]);
 
   // Próximo número do ano: 034/2026
   const proximoNumero = () => {
@@ -296,12 +316,31 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
                   }}
                   style={{width:'100%',padding:'0.55rem 0.8rem',borderRadius:'var(--radius-lg)',background:'var(--color-surface)',color:'var(--color-text)',border:'1px solid var(--color-border)',fontSize:'0.88rem',outline:'none'}}>
                   <option value="">Prancha comum (sem requerimento)</option>
-                  {eleicoes.map(el => (
+                  {(todasGestoes ? eleicoes : eleicoes.slice(0, 1)).map(el => (
                     <option key={el.id} value={el.id}>
                       Gestão {el.gestao} — eleição de {formatarData(el.data_eleicao)}
                     </option>
                   ))}
                 </select>
+                <label style={{display:'flex',alignItems:'center',gap:'0.4rem',marginTop:'0.4rem',fontSize:'0.75rem',color:'var(--color-text-muted)',cursor:'pointer'}}>
+                  <input type="checkbox" checked={todasGestoes} onChange={e => setTodasGestoes(e.target.checked)} />
+                  Mostrar todas as gestões
+                </label>
+
+                {/* Instaladores da gestão escolhida */}
+                {eleicaoPrancha && instaladores.length > 0 && (
+                  <div style={{marginTop:'0.6rem',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',overflow:'hidden'}}>
+                    <div style={{padding:'0.4rem 0.7rem',background:'var(--color-surface)',fontSize:'0.72rem',fontWeight:800,color:'var(--color-accent)',textTransform:'uppercase'}}>
+                      Instaladores — Ata de Posse
+                    </div>
+                    {instaladores.map((i, k) => (
+                      <div key={i.cargo} style={{display:'flex',justifyContent:'space-between',gap:'0.6rem',padding:'0.35rem 0.7rem',fontSize:'0.8rem',borderTop: k ? '1px solid var(--color-border)' : 'none'}}>
+                        <span style={{color:'var(--color-text-muted)'}}>{i.cargo}</span>
+                        <strong style={{color:'var(--color-text)'}}>{i.nome}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {eleicaoPrancha && (
                   <div style={{display:'flex',gap:'0.5rem',marginTop:'0.6rem'}}>
                     <button type="button" disabled={!!gerandoDoc} onClick={() => gerarPrancha('docx')}
