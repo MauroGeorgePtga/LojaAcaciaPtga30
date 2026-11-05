@@ -30,8 +30,9 @@ export const CORPO_PADRAO_INSTALACAO =
   + 'para a instalação e posse do Venerável Mestre eleito para a gestão {gestao}.\n'
   + 'Os trabalhos eleitorais realizaram-se em Sessão Ordinária de Eleição no dia {data_eleicao}, '
   + 'convocada pelo Edital nº {numero_edital}, de {data_edital}, e registrada no Balaústre nº {numero_balaustre}, '
-  + 'tendo sido eleito Venerável Mestre o Ir∴ {vm_eleito}.\n'
+  + 'tendo sido eleito Venerável Mestre o Ir∴ *{vm_eleito}*.\n'
   + 'A sessão de posse está prevista para o dia {data_posse}, às {hora_posse} horas, no Templo desta Oficina.\n'
+  + '{comissao_instaladora}'
   + 'Na certeza do atendimento, renovamos os protestos de elevada estima e fraterno apreço.';
 
 // Monta as variáveis a partir da eleição escolhida
@@ -47,10 +48,23 @@ export const dadosDaEleicao = async (eleicaoId) => {
   const { data: chapa } = await supabase.from('eleicao_chapas')
     .select('cargo, irmao_id, eleita').eq('eleicao_id', eleicaoId).eq('eleita', true);
   const vmEleitoId = (chapa || []).find(c => /vener/i.test(c.cargo))?.irmao_id;
-  const ids = [vmEleitoId, el.vm_sainte_id].filter(Boolean);
+  const ids = [vmEleitoId, el.vm_sainte_id,
+    el.vm_instalador_id, el.primeiro_vigilante_instalador_id, el.segundo_vigilante_instalador_id].filter(Boolean);
   const { data: irmaos } = ids.length
     ? await supabase.from('irmaos').select('id, nome').in('id', ids) : { data: [] };
   const nomeDe = (id) => (irmaos || []).find(i => String(i.id) === String(id))?.nome || '';
+
+  // Venerável da gestão ATUAL (assina a prancha quando a eleição não tem VM sainte)
+  let vmAtualNome = '';
+  try {
+    const { data: corpo } = await supabase.from('corpo_administrativo')
+      .select('cargo, irmao_id, ano_exercicio').order('ano_exercicio', { ascending: false });
+    const vmAtual = (corpo || []).find(c => /vener/i.test(c.cargo || ''));
+    if (vmAtual) {
+      const { data: ir } = await supabase.from('irmaos').select('nome').eq('id', vmAtual.irmao_id).maybeSingle();
+      vmAtualNome = ir?.nome || '';
+    }
+  } catch (e) { vmAtualNome = ''; }
 
   // Edital de convocação da eleição
   let edital = null;
@@ -78,7 +92,25 @@ export const dadosDaEleicao = async (eleicaoId) => {
     data_edital: dataBR(edital?.data_edital || el.data_edital_eleicao),
     numero_balaustre: balaustre ? `${balaustre.numero_balaustre}/${balaustre.ano_balaustre}` : '[nº]',
     vm_eleito: nomeDe(vmEleitoId) || '[Venerável eleito]',
-    vm_sainte: nomeDe(el.vm_sainte_id) || '[Venerável Mestre]',
+    vm_sainte: nomeDe(el.vm_sainte_id) || vmAtualNome || '[Venerável Mestre]',
+    // Comissão Instaladora (quadro "Instaladores — Ata de Posse")
+    vm_instalador: nomeDe(el.vm_instalador_id) || '',
+    primeiro_vigilante_instalador: nomeDe(el.primeiro_vigilante_instalador_id) || '',
+    segundo_vigilante_instalador: nomeDe(el.segundo_vigilante_instalador_id) || '',
+    // Dados da GLEMT (cadastrados em Dados da Loja)
+    grao_mestre: dadosLoja.glemt_grao_mestre || '[Grão-Mestre]',
+    grao_mestre_adjunto: dadosLoja.glemt_grao_mestre_adjunto || '',
+    glemt_gestao: dadosLoja.glemt_gestao || '',
+    // Bloco da Comissão Instaladora (sai vazio quando ninguém foi definido)
+    comissao_instaladora: (() => {
+      const itens = [
+        ['Venerável Mestre Instalador', nomeDe(el.vm_instalador_id)],
+        ['1º Vigilante Instalador', nomeDe(el.primeiro_vigilante_instalador_id)],
+        ['2º Vigilante Instalador', nomeDe(el.segundo_vigilante_instalador_id)],
+      ].filter(([, n]) => n);
+      if (!itens.length) return '';
+      return ['*Comissão Instaladora:*', ...itens.map(([c, n]) => `${c}: ${n}`)].join('\n');
+    })(),
     cidade: dadosLoja.cidade || 'Paranatinga',
     estado: dadosLoja.estado || 'MT',
     dadosLoja,
@@ -99,6 +131,9 @@ export const gerarPranchaInstalacaoDocx = async ({ prancha, V, corpo, titulo }) 
   });
 
   const linhas = interp(corpo || CORPO_PADRAO_INSTALACAO, V).split('\n').filter(l => l.trim() !== '');
+  // *texto* vira negrito
+  const runs = (linha) => String(linha).split(/(\*[^*]+\*)/).filter(Boolean)
+    .map(t => (t.startsWith('*') && t.endsWith('*') ? ar(t.slice(1, -1), { bold: true }) : ar(t)));
 
   const doc = new Document({
     styles: { default: { document: { run: F } } },
@@ -111,8 +146,9 @@ export const gerarPranchaInstalacaoDocx = async ({ prancha, V, corpo, titulo }) 
         ...cabecalhoLojaDocx({ ...V.dadosLoja, logoB64: LOGO_LOJA_B64 }),
         par([ar(`Prancha nº ${prancha.numero_prancha || ''}`, { bold: true })], { align: AlignmentType.RIGHT, before: 240, after: 240 }),
         par([ar(interp(titulo || 'REQUERIMENTO DE COMISSÃO INSTALADORA', V), { bold: true })], { align: AlignmentType.CENTER, after: 120 }),
-        par([ar('Ao Sereníssimo Grão-Mestre da Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', { bold: true })], { align: AlignmentType.CENTER, after: 360 }),
-        ...linhas.map(l => par([ar(l)], { firstLine: true })),
+        par([ar(`Ao Sereníssimo Grão-Mestre, Ir∴ ${V.grao_mestre}`, { bold: true })], { align: AlignmentType.CENTER, after: 0 }),
+        par([ar('Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', { bold: true })], { align: AlignmentType.CENTER, after: 360 }),
+        ...linhas.map(l => par(runs(l), { firstLine: !l.trim().startsWith('Comissão') && !/Instalador:/.test(l) })),
         par([ar(`${V.cidade} – ${V.estado}, ${dataExtenso(prancha.data_prancha)}.`)], { align: AlignmentType.CENTER, before: 480, after: 600 }),
         par([ar('________________________________________')], { align: AlignmentType.CENTER, after: 0 }),
         par([ar(`Ir∴ ${String(V.vm_sainte).toUpperCase()}`, { bold: true })], { align: AlignmentType.CENTER, after: 0 }),
@@ -159,13 +195,17 @@ export const gerarPranchaInstalacaoPDF = ({ prancha, V, corpo, titulo }) => {
   doc.text(pdfTexto(interp(titulo || 'REQUERIMENTO DE COMISSÃO INSTALADORA', V)), W / 2, y, { align: 'center' });
   y += 7;
   doc.setFontSize(11); doc.setTextColor(...TEXTO);
-  doc.splitTextToSize('Ao Sereníssimo Grão-Mestre da Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', W - 2 * M)
-    .forEach(l => { doc.text(l, W / 2, y, { align: 'center' }); y += 6; });
+  doc.text(pdfTexto(`Ao Sereníssimo Grão-Mestre, Ir.·. ${V.grao_mestre}`), W / 2, y, { align: 'center' }); y += 6;
+  doc.text('Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', W / 2, y, { align: 'center' }); y += 6;
   y += 6;
 
   doc.setFont('times', 'normal'); doc.setFontSize(11.5);
   interp(corpo || CORPO_PADRAO_INSTALACAO, V).split('\n').filter(l => l.trim() !== '').forEach((p) => {
-    const ls = doc.splitTextToSize(pdfTexto(p), W - 2 * M);
+    // Linhas da Comissão Instaladora e trechos entre *...* saem em negrito
+    const soNegrito = /^\*[^*]+\*$/.test(p.trim());
+    const ehItemComissao = /Instalador:/.test(p);
+    doc.setFont('times', soNegrito ? 'bold' : 'normal');
+    const ls = doc.splitTextToSize(pdfTexto(p.replace(/\*/g, '')), W - 2 * M - (ehItemComissao ? 8 : 0));
     const ultima = ls.pop();
     if (ls.length) {
       if (y + ls.length * 5.6 > H - 60) { doc.addPage(); y = 20; }
@@ -173,7 +213,8 @@ export const gerarPranchaInstalacaoPDF = ({ prancha, V, corpo, titulo }) => {
       y += ls.length * 5.6;
     }
     if (y > H - 60) { doc.addPage(); y = 20; }
-    doc.text(ultima, M, y); y += 5.6 + 3.4;
+    doc.text(ultima, M + (ehItemComissao ? 8 : 0), y); y += 5.6 + (ehItemComissao ? 1 : 3.4);
+    doc.setFont('times', 'normal');
   });
 
   if (y > H - 50) { doc.addPage(); y = 24; }
