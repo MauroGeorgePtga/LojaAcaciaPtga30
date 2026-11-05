@@ -32,7 +32,7 @@ export const CORPO_PADRAO_INSTALACAO =
   + 'convocada pelo Edital nº {numero_edital}, de {data_edital}, e registrada no Balaústre nº {numero_balaustre}, '
   + 'tendo sido eleito Venerável Mestre o Ir∴ *{vm_eleito}*.\n'
   + 'A sessão de posse está prevista para o dia {data_posse}, às {hora_posse} horas, no Templo desta Oficina.\n'
-  + '{comissao_instaladora}'
+  + '{comissao_instaladora}\n'
   + 'Na certeza do atendimento, renovamos os protestos de elevada estima e fraterno apreço.';
 
 // Monta as variáveis a partir da eleição escolhida
@@ -109,7 +109,7 @@ export const dadosDaEleicao = async (eleicaoId) => {
         ['2º Vigilante Instalador', nomeDe(el.segundo_vigilante_instalador_id)],
       ].filter(([, n]) => n);
       if (!itens.length) return '';
-      return ['*Comissão Instaladora:*', ...itens.map(([c, n]) => `${c}: ${n}`)].join('\n');
+      return ['*Comissão Instaladora:*', ...itens.map(([c, n]) => `${c}: ${n}`), ''].join('\n');
     })(),
     cidade: dadosLoja.cidade || 'Paranatinga',
     estado: dadosLoja.estado || 'MT',
@@ -144,11 +144,11 @@ export const gerarPranchaInstalacaoDocx = async ({ prancha, V, corpo, titulo }) 
       properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 } } },
       children: [
         ...cabecalhoLojaDocx({ ...V.dadosLoja, logoB64: LOGO_LOJA_B64 }),
-        par([ar(`Prancha nº ${prancha.numero_prancha || ''}`, { bold: true })], { align: AlignmentType.RIGHT, before: 240, after: 240 }),
+        par([ar(`Prancha nº ${prancha.numero_prancha || ''}`, { bold: true })], { align: AlignmentType.LEFT, before: 240, after: 240 }),
         par([ar(interp(titulo || 'REQUERIMENTO DE COMISSÃO INSTALADORA', V), { bold: true })], { align: AlignmentType.CENTER, after: 120 }),
-        par([ar(`Ao Sereníssimo Grão-Mestre, Ir∴ ${V.grao_mestre}`, { bold: true })], { align: AlignmentType.CENTER, after: 0 }),
-        par([ar('Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', { bold: true })], { align: AlignmentType.CENTER, after: 360 }),
-        ...linhas.map(l => par(runs(l), { firstLine: !l.trim().startsWith('Comissão') && !/Instalador:/.test(l) })),
+        par([ar(`Ao Sereníssimo Grão-Mestre, Ir∴ ${V.grao_mestre}`, { bold: true })], { align: AlignmentType.JUSTIFIED, after: 0 }),
+        par([ar('Grande Loja Maçônica do Estado de Mato Grosso – GLEMT', { bold: true })], { align: AlignmentType.JUSTIFIED, after: 360 }),
+        ...linhas.map(l => par(runs(l), { firstLine: !/^\*?Comissão Instaladora/.test(l.trim()) && !/Instalador:/.test(l) })),
         par([ar(`${V.cidade} – ${V.estado}, ${dataExtenso(prancha.data_prancha)}.`)], { align: AlignmentType.CENTER, before: 480, after: 600 }),
         par([ar('________________________________________')], { align: AlignmentType.CENTER, after: 0 }),
         par([ar(`Ir∴ ${String(V.vm_sainte).toUpperCase()}`, { bold: true })], { align: AlignmentType.CENTER, after: 0 }),
