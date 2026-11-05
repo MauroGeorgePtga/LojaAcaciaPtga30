@@ -41,8 +41,6 @@ const Pranchas = ({ pranchas, onUpdate, showSuccess, showError, permissoes, grau
       ['Venerável Mestre Instalador', el.vm_instalador_id || el.vm_sainte_id],
       ['1º Vigilante Instalador', el.primeiro_vigilante_instalador_id],
       ['2º Vigilante Instalador', el.segundo_vigilante_instalador_id],
-      ['Orador Instalador', el.orador_instalador_id || el.orador_sainte_id],
-      ['Secretário Instalador', el.secretario_instalador_id || el.secretario_sainte_id],
     ].filter(([, id]) => id);
     if (!mapa.length) { setInstaladores([]); return; }
     supabase.from('irmaos').select('id, nome').in('id', mapa.map(([, id]) => id))
