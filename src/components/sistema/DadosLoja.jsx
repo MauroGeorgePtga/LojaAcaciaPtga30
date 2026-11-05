@@ -28,6 +28,10 @@ export default function DadosLoja({ showSuccess, showError }) {
     cnpj: '',
     nome_cartorio: 'ILMª. SRª. TABELIÃ DO CARTÓRIO DE NOTAS, PROTESTO DE TÍTULOS, REGISTRO CIVIL DAS PESSOAS NATURAIS E JURÍDICAS DE PARANATINGA - MT – 2º SERVIÇO NOTORIAL E REGISTRAL',
     numero_registro_cartorio: '04, do Livro A-01',
+    // Dados da GLEMT (mudam a cada gestão)
+    glemt_gestao: '', glemt_grao_mestre: '', glemt_grao_mestre_adjunto: '',
+    glemt_grande_orador: '', glemt_grande_secretario: '', glemt_grande_tesoureiro: '',
+    glemt_endereco: '', glemt_email: '', glemt_site: '',
   });
 
   useEffect(() => {
@@ -320,6 +324,62 @@ export default function DadosLoja({ showSuccess, showError }) {
             <p className="form-hint">Aparece nos requerimentos de averbação da ata de eleição</p>
           </div>
 
+        </div>
+      </div>
+
+      {/* DADOS DA GLEMT */}
+      <div className="card mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {secaoTitulo('🏛️', 'Grande Loja Maçônica do Estado de Mato Grosso — GLEMT')}
+
+          <div>
+            <label className="form-label">Gestão</label>
+            <input type="text" name="glemt_gestao" value={dadosLoja.glemt_gestao || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" placeholder="Ex: 2027/2030" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="form-label">Sereníssimo Grão-Mestre</label>
+            <input type="text" name="glemt_grao_mestre" value={dadosLoja.glemt_grao_mestre || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" placeholder="Nome completo" />
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="form-label">Grão-Mestre Adjunto</label>
+            <input type="text" name="glemt_grao_mestre_adjunto" value={dadosLoja.glemt_grao_mestre_adjunto || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" placeholder="Nome completo" />
+          </div>
+
+          <div>
+            <label className="form-label">Grande Orador</label>
+            <input type="text" name="glemt_grande_orador" value={dadosLoja.glemt_grande_orador || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" />
+          </div>
+          <div>
+            <label className="form-label">Grande Secretário</label>
+            <input type="text" name="glemt_grande_secretario" value={dadosLoja.glemt_grande_secretario || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" />
+          </div>
+          <div>
+            <label className="form-label">Grande Tesoureiro</label>
+            <input type="text" name="glemt_grande_tesoureiro" value={dadosLoja.glemt_grande_tesoureiro || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" />
+          </div>
+
+          <div className="md:col-span-3">
+            <label className="form-label">Endereço</label>
+            <input type="text" name="glemt_endereco" value={dadosLoja.glemt_endereco || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" placeholder="Rua, nº, bairro, cidade-UF" />
+          </div>
+          <div className="md:col-span-2">
+            <label className="form-label">E-mail</label>
+            <input type="email" name="glemt_email" value={dadosLoja.glemt_email || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" />
+          </div>
+          <div>
+            <label className="form-label">Site</label>
+            <input type="text" name="glemt_site" value={dadosLoja.glemt_site || ''} onChange={handleChange}
+              disabled={!editando} className="form-input" placeholder="www.glemt.org.br" />
+          </div>
         </div>
       </div>
 
