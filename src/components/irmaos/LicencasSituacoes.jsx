@@ -80,7 +80,7 @@ const montarPrevia = (r) => {
     ? `Sua ${nomeSit} venceu — regularização de situação — Loja Acácia nº 30`
     : `Sua ${nomeSit} ${quando} — Loja Acácia nº 30`;
   const texto = [
-    `Prezado Ir. ${r.irmao.nome},`,
+    `Prezado Ir∴ ${r.irmao.nome},`,
     '',
     vencida
       ? 'Informamos que a sua situação abaixo encontra-se VENCIDA:'
@@ -548,7 +548,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
                   {previa.texto}
                 </pre>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                  Respostas do irmão vão para o Secretário; o Administrador recebe cópia oculta.
+                  Respostas do irmão vão para o Secretário; o Administrador recebe cópia oculta; Venerável, Secretário e Orador são informados por e-mail de que o irmão foi avisado.
                 </p>
                 {ultimo && (
                   <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: '600', color: '#f59e0b' }}>
