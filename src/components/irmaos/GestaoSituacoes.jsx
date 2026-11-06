@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 
+const hojeLocal = () => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+
 export default function GestaoSituacoes({ irmaId }) {
   const [situacoes, setSituacoes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -36,12 +42,11 @@ export default function GestaoSituacoes({ irmaId }) {
 
       if (error) throw error;
 
-      // Situação com data de fim já passada e ainda "ativa" → encerra automaticamente
-      const hojeStr = new Date().toISOString().split('T')[0];
-      const vencidas = (data || []).filter(x => x.status === 'ativa' && x.data_fim && x.data_fim < hojeStr);
-      if (vencidas.length) {
-        await supabase.from('historico_situacoes').update({ status: 'vencida' }).in('id', vencidas.map(x => x.id));
-        vencidas.forEach(x => { x.status = 'vencida'; });
+      // Situação com data de fim já passada NÃO é encerrada automaticamente: fica "VENCIDA"
+      // (pendente de encerramento) para o controle. A data final é o limite: o cadastro do irmão
+      // já volta a Regular (se estava licenciado e não há outra licença em vigor).
+      const hojeStr = hojeLocal();
+      if ((data || []).some(x => x.status === 'ativa' && x.data_fim && x.data_fim < hojeStr)) {
         await atualizarSituacaoCadastro(data);
       }
       setSituacoes(data || []);
@@ -109,8 +114,7 @@ export default function GestaoSituacoes({ irmaId }) {
         motivo: form.motivo,
         destino_transferencia: form.tipo_situacao === 'desligado' ? form.destino_transferencia : null,
         documento: form.documento,
-        observacoes: form.observacoes,
-        status: 'ativa'
+        observacoes: form.observacoes
       };
 
       let error;
@@ -122,7 +126,7 @@ export default function GestaoSituacoes({ irmaId }) {
       } else {
         ({ error } = await supabase
           .from('historico_situacoes')
-          .insert([dados]));
+          .insert([{ ...dados, status: 'ativa' }]));
       }
 
       if (error) throw error;
@@ -144,7 +148,7 @@ export default function GestaoSituacoes({ irmaId }) {
 
   // Sem licença em vigor → cadastro do irmão volta a "Regular" (só se estava como licenciado)
   const atualizarSituacaoCadastro = async (lista) => {
-    const hojeStr = new Date().toISOString().split('T')[0];
+    const hojeStr = hojeLocal();
     const emVigor = (lista || []).some(x => x.status === 'ativa' && String(x.tipo_situacao || '').toLowerCase().includes('licen')
       && x.data_inicio <= hojeStr && (!x.data_fim || x.data_fim >= hojeStr));
     if (emVigor) return;
@@ -154,26 +158,34 @@ export default function GestaoSituacoes({ irmaId }) {
     }
   };
 
-  // Encerrar: termina a situação (no fim previsto ou antecipadamente) — o irmão volta a ficar regular
+  // Encerrar: termina a situação (no fim previsto, antecipadamente ou registrando uma VENCIDA)
   const encerrar = async (situacao) => {
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     const antecipado = situacao.data_fim && situacao.data_fim > hoje;
-    if (!window.confirm(antecipado
-      ? `Encerrar esta situação ANTECIPADAMENTE hoje (${hoje.split('-').reverse().join('/')})?\nO fim previsto era ${situacao.data_fim.split('-').reverse().join('/')}.`
-      : 'Deseja encerrar esta situação hoje?')) return;
+    const vencida = situacao.data_fim && situacao.data_fim < hoje;
+    const fmt = (d) => d.split('-').reverse().join('/');
+    if (!window.confirm(vencida
+      ? `Encerrar esta situação vencida?\nO período (até ${fmt(situacao.data_fim)}) continua registrado.`
+      : antecipado
+        ? `Encerrar esta situação ANTECIPADAMENTE hoje (${fmt(hoje)})?\nO fim previsto era ${fmt(situacao.data_fim)}.`
+        : 'Deseja encerrar esta situação hoje?')) return;
 
     try {
+      // Vencida: só muda o status, mantém a data final original
+      const dados = vencida
+        ? { status: 'vencida' }
+        : {
+            data_fim: hoje,
+            status: 'vencida',
+            observacoes: antecipado ? `${situacao.observacoes ? situacao.observacoes + ' · ' : ''}Encerrada antecipadamente em ${fmt(hoje)} (fim previsto ${fmt(situacao.data_fim)})` : situacao.observacoes
+          };
       const { error } = await supabase
         .from('historico_situacoes')
-        .update({ 
-          data_fim: hoje,
-          status: 'vencida',
-          observacoes: antecipado ? `${situacao.observacoes ? situacao.observacoes + ' · ' : ''}Encerrada antecipadamente em ${hoje.split('-').reverse().join('/')} (fim previsto ${situacao.data_fim.split('-').reverse().join('/')})` : situacao.observacoes
-        })
+        .update(dados)
         .eq('id', situacao.id);
 
       if (error) throw error;
-      await atualizarSituacaoCadastro(situacoes.map(x => (x.id === situacao.id ? { ...x, data_fim: hoje, status: 'vencida' } : x)));
+      await atualizarSituacaoCadastro(situacoes.map(x => (x.id === situacao.id ? { ...x, ...dados } : x)));
 
       setMensagem({ tipo: 'sucesso', texto: 'Situação encerrada! O irmão volta a ficar regular.' });
       carregar();
@@ -186,7 +198,7 @@ export default function GestaoSituacoes({ irmaId }) {
 
   // Reativar uma situação cancelada por engano: volta como encerrada (fim já passou) ou em vigor
   const reativar = async (situacao) => {
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     const novoStatus = situacao.data_fim && situacao.data_fim < hoje ? 'vencida' : 'ativa';
     if (!window.confirm(`Reativar esta situação?\nEla volta como ${novoStatus === 'vencida' ? 'ENCERRADA (o período continua registrado)' : 'ATIVA'}.`)) return;
     try {
@@ -239,29 +251,26 @@ export default function GestaoSituacoes({ irmaId }) {
     return labels[tipo] || tipo;
   };
 
-  const getStatusIcon = (situacao) => {
-    const hoje = new Date();
-    const inicio = new Date(situacao.data_inicio + 'T00:00:00');
-    const fim = situacao.data_fim ? new Date(situacao.data_fim + 'T00:00:00') : null;
-
-    if (situacao.status === 'cancelada') return '🚫';
-    if (situacao.status === 'vencida') return '⚪';
-    if (hoje < inicio) return '🔵'; // Futura
-    if (!fim || hoje <= fim) return '🟢'; // Ativa
-    return '⚪'; // Vencida
-  };
-
-  const getStatusTexto = (situacao) => {
-    const hoje = new Date();
-    const inicio = new Date(situacao.data_inicio + 'T00:00:00');
-    const fim = situacao.data_fim ? new Date(situacao.data_fim + 'T00:00:00') : null;
-
+  // Situação "ativa" com data final já passada = VENCIDA (pendente de encerramento)
+  const getStatusKey = (situacao) => {
+    const hoje = hojeLocal();
     if (situacao.status === 'cancelada') return 'CANCELADA';
     if (situacao.status === 'vencida') return 'ENCERRADA';
-    if (hoje < inicio) return 'AGENDADA';
-    if (!fim || hoje <= fim) return 'ATIVA';
-    return 'ENCERRADA';
+    if (hoje < situacao.data_inicio) return 'AGENDADA';
+    if (!situacao.data_fim || hoje <= situacao.data_fim) return 'ATIVA';
+    return 'VENCIDA';
   };
+
+  const getStatusIcon = (situacao) => {
+    const k = getStatusKey(situacao);
+    if (k === 'CANCELADA') return '🚫';
+    if (k === 'AGENDADA') return '🔵';
+    if (k === 'ATIVA') return '🟢';
+    if (k === 'VENCIDA') return '🔴';
+    return '⚪';
+  };
+
+  const getStatusTexto = (situacao) => getStatusKey(situacao);
 
   if (loading) {
     return <div className="p-4 text-center">Carregando situações...</div>;
@@ -301,6 +310,7 @@ export default function GestaoSituacoes({ irmaId }) {
                 border:'1px solid var(--color-border)',
                 borderLeft: getStatusTexto(sit)==='ATIVA' ? '4px solid #10b981' :
                             getStatusTexto(sit)==='AGENDADA' ? '4px solid var(--color-accent)' :
+                            getStatusTexto(sit)==='VENCIDA' ? '4px solid #ef4444' :
                             '4px solid var(--color-border)',
                 background: sit.status==='cancelada' ? 'var(--color-surface-2)' : 'var(--color-surface)',
                 opacity: sit.status==='cancelada' ? 0.6 : 1,
@@ -312,9 +322,9 @@ export default function GestaoSituacoes({ irmaId }) {
                     <span className="text-2xl">{getStatusIcon(sit)}</span>
                     <span style={{
                       fontSize:'0.7rem',fontWeight:'700',padding:'0.15rem 0.5rem',borderRadius:'999px',
-                      background:getStatusTexto(sit)==='ATIVA'?'rgba(16,185,129,0.15)':getStatusTexto(sit)==='AGENDADA'?'rgba(59,130,246,0.15)':'var(--color-surface-2)',
-                      color:getStatusTexto(sit)==='ATIVA'?'#10b981':getStatusTexto(sit)==='AGENDADA'?'#3b82f6':'var(--color-text-muted)',
-                      border:`1px solid ${getStatusTexto(sit)==='ATIVA'?'rgba(16,185,129,0.3)':getStatusTexto(sit)==='AGENDADA'?'rgba(59,130,246,0.3)':'var(--color-border)'}`,
+                      background:getStatusTexto(sit)==='ATIVA'?'rgba(16,185,129,0.15)':getStatusTexto(sit)==='AGENDADA'?'rgba(59,130,246,0.15)':getStatusTexto(sit)==='VENCIDA'?'rgba(239,68,68,0.15)':'var(--color-surface-2)',
+                      color:getStatusTexto(sit)==='ATIVA'?'#10b981':getStatusTexto(sit)==='AGENDADA'?'#3b82f6':getStatusTexto(sit)==='VENCIDA'?'#ef4444':'var(--color-text-muted)',
+                      border:`1px solid ${getStatusTexto(sit)==='ATIVA'?'rgba(16,185,129,0.3)':getStatusTexto(sit)==='AGENDADA'?'rgba(59,130,246,0.3)':getStatusTexto(sit)==='VENCIDA'?'rgba(239,68,68,0.3)':'var(--color-border)'}`,
                     }}>
                       {getStatusTexto(sit)}
                     </span>
@@ -364,14 +374,14 @@ export default function GestaoSituacoes({ irmaId }) {
                     >
                       Editar
                     </button>
-                    {sit.status === 'ativa' && getStatusTexto(sit) === 'ATIVA' && (
+                    {sit.status === 'ativa' && ['ATIVA', 'VENCIDA'].includes(getStatusTexto(sit)) && (
                       <button
                         type="button"
-                        title={sit.data_fim ? 'Encerrar antes do fim previsto' : 'Encerrar hoje'}
+                        title={sit.data_fim && sit.data_fim > hojeLocal() ? 'Encerrar antes do fim previsto' : getStatusTexto(sit) === 'VENCIDA' ? 'Registrar o encerramento (o período continua registrado)' : 'Encerrar hoje'}
                         onClick={() => encerrar(sit)}
                         style={{padding:"0.25rem 0.65rem",fontSize:"0.8rem",background:"rgba(245,158,11,0.15)",color:"#f59e0b",border:"1px solid rgba(245,158,11,0.3)",borderRadius:"var(--radius-md)",cursor:"pointer",fontWeight:"600"}}
                       >
-                        {sit.data_fim ? 'Encerrar antecipado' : 'Encerrar'}
+                        {sit.data_fim && sit.data_fim > hojeLocal() ? 'Encerrar antecipado' : 'Encerrar'}
                       </button>
                     )}
                     {sit.status === 'ativa' && (
