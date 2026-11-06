@@ -7,6 +7,7 @@ const TIPOS = [
   { id: 'aniversariantes',     label: 'Aniversariantes',     emoji: '🎂', desc: 'Lista semanal enviada ao Venerável e Chanceler' },
   { id: 'lembrete_financeiro', label: 'Lembrete Financeiro', emoji: '⚠️', desc: 'Apenas irmãos com saldo devedor' },
   { id: 'cronograma_mes',      label: 'Cronograma do Mês',   emoji: '📅', desc: 'Eventos do mês selecionado enviados aos irmãos' },
+  { id: 'vencimento_licencas', label: 'Vencimento de Licenças', emoji: '🗓️', desc: 'Situações com data final a vencer: Venerável, Secretário, Orador e Admin' },
   { id: 'boletim_mensal',      label: 'Boletim Mensal',      emoji: '📊', desc: 'Indicadores gerais da Loja: quadro, presença, financeiro e próximos eventos' },
 ];
 
@@ -198,6 +199,19 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
     setEnviando(true);
     setResultados([]);
     try {
+      if (tipoSelec === 'vencimento_licencas') {
+        const { data: jsonV, error: fnErrorV } = await supabase.functions.invoke('avisar-vencimento-licencas', {
+          body: { modo: 'manual' },
+        });
+        if (fnErrorV) throw fnErrorV;
+        if (!jsonV?.ok) throw new Error(jsonV?.erro || 'Erro desconhecido');
+        setResultados(jsonV.resultados || []);
+        const enviadosV = (jsonV.resultados || []).filter(r => r.status === 'enviado').length;
+        if (!jsonV.total_situacoes) showSuccess('Nenhuma situação vencendo no momento. Nenhum e-mail enviado.');
+        else showSuccess('Aviso enviado para ' + enviadosV + ' destinatario(s)!');
+        carregarLogs();
+        return;
+      }
       if (tipoSelec === 'boletim_mensal') {
         const { data: jsonB, error: fnErrorB } = await supabase.functions.invoke('enviar-boletim-mensal', {
           body: { acao: 'boletim_mensal', mes_ref: mesCronograma || '', irmaos_ids: irmaosSelec.length > 0 ? irmaosSelec : undefined },
@@ -282,6 +296,7 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
   const sCardSel = (sel) => ({ ...sCard, borderColor: sel ? 'var(--color-accent)' : 'var(--color-border)', background: sel ? 'var(--color-accent-bg)' : 'var(--color-surface)', cursor: 'pointer' });
 
   const irmaosVisiveis = irmaos.filter(i => i.nome.toLowerCase().includes(filtroBusca.toLowerCase()));
+  const semSelecao = tipoSelec === 'aniversariantes' || tipoSelec === 'vencimento_licencas';
 
   // Rótulo do mês selecionado
   const labelMesSel = mesesComRegistros.find(m => m.valor === mesCronograma)?.label || '';
@@ -441,6 +456,15 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
               </div>
             )}
 
+            {/* Info para vencimento de licenças */}
+            {tipoSelec === 'vencimento_licencas' && (
+              <div style={{ ...sCard, background: 'var(--color-accent-bg)', borderColor: 'var(--color-accent)' }}>
+                <p style={{ color: 'var(--color-text)', margin: 0, fontSize: '0.875rem' }}>
+                  ℹ️ Envia a lista de licenças e situações com data final que vencem em até <strong>10 dias</strong> (ou já vencidas e ainda não encerradas) para o <strong>Venerável</strong>, <strong>Secretário</strong>, <strong>Orador</strong> e <strong>Administrador</strong>. O envio automático (10 dias, 3 dias e no dia) roda todo dia pelo pg_cron.
+                </p>
+              </div>
+            )}
+
             {/* Botão enviar */}
             {podeEnviarEmail ? (
             <button onClick={enviarManual} disabled={enviando}
@@ -449,6 +473,8 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
                 ? '📤 Enviando...'
                 : tipoSelec === 'aniversariantes'
                   ? '📤 Enviar para Liderança'
+                  : tipoSelec === 'vencimento_licencas'
+                    ? '📤 Enviar aviso agora'
                   : tipoSelec === 'cronograma_mes'
                     ? `📅 Enviar cronograma de ${labelMesSel || '...'} para ${irmaosSelec.length} irmão(s)`
                     : `📤 Enviar para ${irmaosSelec.length} irmão(s)`}
@@ -481,9 +507,9 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
           <div style={sCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <p style={{ fontWeight: '700', color: 'var(--color-text)', margin: 0, fontSize: '0.95rem' }}>
-                {tipoSelec === 'aniversariantes' ? 'Irmãos com e-mail' : `${irmaosSelec.length === 0 ? 'Selecionar' : `${irmaosSelec.length} selecionado(s)`}`}
+                {semSelecao ? 'Irmãos com e-mail' : `${irmaosSelec.length === 0 ? 'Selecionar' : `${irmaosSelec.length} selecionado(s)`}`}
               </p>
-              {tipoSelec !== 'aniversariantes' && (
+              {!semSelecao && (
                 <button onClick={selecionarTodos}
                   style={{ padding: '0.25rem 0.75rem', background: 'var(--color-surface-2)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', cursor: 'pointer' }}>
                   {irmaosSelec.length === irmaosVisiveis.length ? 'Desmarcar todos' : 'Selecionar todos'}
@@ -498,9 +524,9 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
               {irmaosVisiveis.map((irmao, idx) => {
                 const sel = irmaosSelec.includes(irmao.id);
                 return (
-                  <div key={irmao.id} onClick={() => tipoSelec !== 'aniversariantes' && toggleIrmao(irmao.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-lg)', background: sel ? 'var(--color-accent-bg)' : idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-2)', border: '1px solid ' + (sel ? 'var(--color-accent)' : 'transparent'), cursor: tipoSelec !== 'aniversariantes' ? 'pointer' : 'default', transition: 'all 0.15s' }}>
-                    {tipoSelec !== 'aniversariantes' && (
+                  <div key={irmao.id} onClick={() => !semSelecao && toggleIrmao(irmao.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-lg)', background: sel ? 'var(--color-accent-bg)' : idx % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-2)', border: '1px solid ' + (sel ? 'var(--color-accent)' : 'transparent'), cursor: !semSelecao ? 'pointer' : 'default', transition: 'all 0.15s' }}>
+                    {!semSelecao && (
                       <input type="checkbox" checked={sel} readOnly
                         style={{ accentColor: 'var(--color-accent)', flexShrink: 0 }} />
                     )}
@@ -532,7 +558,7 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
             </p>
           </div>
 
-          {TIPOS.map(tipo => {
+          {TIPOS.filter(t => t.id !== 'vencimento_licencas').map(tipo => {
             const cfg = configs.find(c => c.tipo === tipo.id);
             const ativo = cfg?.ativo || false;
             return (
