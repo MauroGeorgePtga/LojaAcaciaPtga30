@@ -16,6 +16,7 @@ import ControleAcesso from './components/administracao/ControleAcesso';
 import CadastrarIrmao from './components/irmaos/CadastrarIrmao';
 import VisualizarIrmaos from './components/irmaos/VisualizarIrmaos';
 import QuadroIrmaos from './components/irmaos/QuadroIrmaos';
+import LicencasSituacoes from './components/irmaos/LicencasSituacoes';
 import Comendas from './components/irmaos/Comendas';
 import PerfilIrmao from './components/irmaos/PerfilIrmao';
 import PerfilCompletoIrmao from './components/irmaos/PerfilCompletoIrmao';
@@ -180,6 +181,7 @@ function App() {
     'cadastro': '➕ Cadastro de Irmãos',
     'visualizar': '👥 Visualizar Irmãos',
     'quadro': '📋 Quadro de Irmãos',
+    'licencas-situacoes': '🗓️ Licenças e Situações',
     'comendas': '🎖️ Comendas',
     'modelos-documentos': '📝 Modelos de Documentos',
     'balaustres': '📜 Balaustres',
@@ -1827,6 +1829,7 @@ ${filho.falecido ? `<div class="info-item"><span class="info-label">Status:</spa
                   {currentPage === 'cadastro' && '➕ Cadastro de Irmãos'}
                   {currentPage === 'visualizar' && '👥 Visualizar Irmãos'}
                   {currentPage === 'quadro' && '📋 Quadro de Irmãos'}
+                  {currentPage === 'licencas-situacoes' && '🗓️ Licenças e Situações'}
                   {currentPage === 'comendas' && '🎖️ Comendas'}
                   {currentPage === 'balaustres' && '📜 Balaustres'}
                   {currentPage === 'pranchas' && '📄 Pranchas Expedidas'}
@@ -1979,6 +1982,15 @@ ${filho.falecido ? `<div class="info-item"><span class="info-label">Status:</spa
         {/* QUADRO DE IRMÃOS */}
         {currentPage === 'quadro' && (
           <QuadroIrmaos irmaos={irmaos} />
+        )}
+
+        {/* LICENÇAS E SITUAÇÕES */}
+        {currentPage === 'licencas-situacoes' && (
+          <LicencasSituacoes
+            podeEditar={pode(mapaPermissoes, 'cadastro_irmaos', 'editar')}
+            showSuccess={showSuccess}
+            showError={showError}
+          />
         )}
 
         {currentPage === 'modelos-documentos' && (
