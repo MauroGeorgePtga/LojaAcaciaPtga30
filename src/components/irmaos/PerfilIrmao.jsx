@@ -906,7 +906,7 @@ export default function PerfilIrmao({ irmaoId, onVoltar, showSuccess, showError,
                       <option value="irregular">Irregular</option>
                       <option value="licenciado">Licenciado</option>
                       <option value="suspenso">Suspenso</option>
-                      <option value="desligado">Desligado</option>
+                      <option value="desligado">Quite Placet</option>
                       <option value="excluido">Excluído</option>
                       <option value="falecido">Falecido</option>
                       <option value="ex_oficio">Ex-Ofício</option>
