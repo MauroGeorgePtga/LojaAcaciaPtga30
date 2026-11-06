@@ -559,7 +559,7 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
               {l:'Licenciado',v:stats.licenciados,c:'#3b82f6'},
               {l:'Irregular',v:stats.irregulares,c:LARANJA},
               {l:'Suspenso',v:stats.suspensos,c:VERMELHO},
-              {l:'Desligado',v:stats.desligados,c:'#94a3b8'},
+              {l:'Quite Placet',v:stats.desligados,c:'#94a3b8'},
               {l:'Falecido',v:stats.falecidos,c:'#475569'},
             ].filter(i=>i.v>0).map(item=>(
               <div key={item.l} style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.4rem'}}>
