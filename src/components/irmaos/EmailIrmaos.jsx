@@ -460,7 +460,7 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
             {tipoSelec === 'vencimento_licencas' && (
               <div style={{ ...sCard, background: 'var(--color-accent-bg)', borderColor: 'var(--color-accent)' }}>
                 <p style={{ color: 'var(--color-text)', margin: 0, fontSize: '0.875rem' }}>
-                  ℹ️ Envia a lista de licenças e situações com data final que vencem em até <strong>10 dias</strong> (ou já vencidas e ainda não encerradas) para o <strong>Venerável</strong>, <strong>Secretário</strong>, <strong>Orador</strong> e <strong>Administrador</strong>. O envio automático (10 dias, 3 dias, no dia e lembrete semanal das vencidas não encerradas) roda todo dia pelo pg_cron.
+                  ℹ️ Envia a lista de licenças e situações com data final que vencem em até <strong>10 dias</strong> (ou já vencidas e ainda não encerradas) para o <strong>Venerável</strong>, <strong>Secretário</strong>, <strong>Orador</strong> e <strong>Administrador</strong>. O envio automático (10 dias, 3 dias, no dia e lembrete semanal das vencidas não encerradas) roda todo dia pelo pg_cron e avisa também o próprio irmão (se tiver e-mail).
                 </p>
               </div>
             )}
