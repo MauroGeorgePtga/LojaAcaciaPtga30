@@ -21,7 +21,7 @@ const chaveInterrupcao = (tipo) => {
   return null;
 };
 const ROTULO_INTERRUPCAO = {
-  licenca: 'Licença', desligado: 'Desligado / Quit Placet', exoficio: 'Ex-Ofício',
+  licenca: 'Licença', desligado: 'Quite Placet', exoficio: 'Ex-Ofício',
   suspenso: 'Suspensão', irregular: 'Irregularidade', excluido: 'Exclusão',
 };
 const fmtD = (d) => (d ? new Date(String(d).substring(0, 10) + 'T00:00:00').toLocaleDateString('pt-BR') : '');
