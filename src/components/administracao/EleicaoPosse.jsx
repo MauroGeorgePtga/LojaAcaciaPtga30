@@ -1131,7 +1131,7 @@ export default function EleicaoPosse({ permissoes, irmaos, userData, showSuccess
   // desligados, irregulares e licenciados). Quem já foi escolhido nesta eleição
   // continua na lista, com aviso se hoje não estiver regular.
   const porNome = (a, b) => (a.nome || '').localeCompare(b.nome || '');
-  const ROTULO_SIT = { licenciado: 'Licenciado', irregular: 'Irregular', desligado: 'Desligado', falecido: 'Falecido' };
+  const ROTULO_SIT = { licenciado: 'Licenciado', irregular: 'Irregular', desligado: 'Quite Placet', falecido: 'Falecido' };
   const dataRefEleicao = eleicaoSelecionada?.data_eleicao || null;
   const idsJaEscolhidos = new Set([
     ...chapas.map(c => c.irmao_id),
