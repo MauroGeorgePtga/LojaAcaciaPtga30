@@ -644,7 +644,7 @@ export const Dashboard = ({ irmaos, balaustres, cronograma = [] }) => {
               {label:'Licenciados', val: irmaosLicenciados.length, cor:'#6366f1'},
               {label:'Irregulares', val: irmaosIrregulares.length, cor:'#f59e0b'},
               {label:'Suspensos',   val: irmaosSuspensos.length,   cor:'#ef4444'},
-              {label:'Desligados',  val: irmaosDesligados.length,  cor:'#94a3b8'},
+              {label:'Quite Placet',  val: irmaosDesligados.length,  cor:'#94a3b8'},
               {label:'Excluídos',   val: irmaosExcluidos.length,   cor:'#94a3b8'},
               {label:'Falecidos',   val: irmaosFalecidos.length,   cor:'#64748b'},
               {label:'Ex-Ofício',   val: irmaosExOficio.length,    cor:'#94a3b8'},
@@ -728,10 +728,10 @@ export const Dashboard = ({ irmaos, balaustres, cronograma = [] }) => {
           </div>
           <div 
             style={{border:"1px solid var(--color-border)",borderLeft:"4px solid var(--color-border)",borderRadius:"var(--radius-lg)",padding:"1rem",cursor:"pointer"}}
-            onDoubleClick={() => setModalSituacao({ aberto: true, titulo: '↩️ Irmãos Desligados', irmaos: irmaosDesligados })}
+            onDoubleClick={() => setModalSituacao({ aberto: true, titulo: '↩️ Irmãos em Quite Placet', irmaos: irmaosDesligados })}
             title="Clique duplo para ver detalhes"
           >
-            <div style={{fontSize:"0.78rem",fontWeight:"700",color:"#64748b",marginBottom:"0.4rem"}}>↩️ Desligados</div>
+            <div style={{fontSize:"0.78rem",fontWeight:"700",color:"#64748b",marginBottom:"0.4rem"}}>↩️ Quite Placet</div>
             <div style={{fontSize:"1.75rem",fontWeight:"800",color:"var(--color-text)"}}>{irmaosDesligados.length}</div>
           </div>
           <div 
