@@ -135,6 +135,12 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
   const [avisos, setAvisos] = useState({}); // 'situacaoId|data_fim' → data do último aviso ao irmão
   const [modalAviso, setModalAviso] = useState(null); // registro a avisar
   const [enviandoAviso, setEnviandoAviso] = useState(false);
+  const [informarCargos, setInformarCargos] = useState({ veneravel: false, secretario: false, orador: false });
+
+  const abrirAviso = (r) => {
+    setInformarCargos({ veneravel: false, secretario: false, orador: false });
+    setModalAviso(r);
+  };
 
   const hoje = hojeLocal();
 
@@ -325,7 +331,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
     try {
       setEnviandoAviso(true);
       const { data, error } = await supabase.functions.invoke('avisar-vencimento-licencas', {
-        body: { modo: 'irmao', situacao_id: modalAviso.id },
+        body: { modo: 'irmao', situacao_id: modalAviso.id, informar: Object.keys(informarCargos).filter((k) => informarCargos[k]) },
       });
       if (error) throw error;
       if (!data?.ok) throw new Error(data?.erro || 'Erro desconhecido');
@@ -507,7 +513,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
                 {podeAgir && (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {['vencida', 'vencendo'].includes(r.grupo) && (
-                      <button type="button" onClick={() => setModalAviso(r)} disabled={!r.irmao.email}
+                      <button type="button" onClick={() => abrirAviso(r)} disabled={!r.irmao.email}
                         title={r.irmao.email ? `Enviar aviso para ${r.irmao.email}` : 'Irmão sem e-mail cadastrado'}
                         style={{ ...sBtn('#10b981', 'rgba(16,185,129,0.15)', 'rgba(16,185,129,0.3)'), opacity: r.irmao.email ? 1 : 0.5, cursor: r.irmao.email ? 'pointer' : 'not-allowed' }}>
                         ✉️ Avisar irmão{r.irmao.email ? '' : ' (sem e-mail)'}
@@ -548,8 +554,24 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
                   {previa.texto}
                 </pre>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                  Respostas do irmão vão para o Secretário; o Administrador recebe cópia oculta; Venerável, Secretário, Orador e Administrador são informados por e-mail de que o irmão foi avisado.
+                  Respostas do irmão vão para o Secretário. O Administrador sempre recebe o informativo de que o irmão foi avisado.
                 </p>
+                <fieldset style={{ margin: 0, padding: '0.6rem 0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}>
+                  <legend style={{ fontSize: '0.8rem', fontWeight: '600', color: 'var(--color-text)', padding: '0 0.35rem' }}>
+                    Enviar o informativo também para:
+                  </legend>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                    {[['veneravel', 'Venerável'], ['secretario', 'Secretário'], ['orador', 'Orador']].map(([k, l]) => (
+                      <label key={k} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', color: 'var(--color-text)', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox" checked={informarCargos[k]}
+                          onChange={(e) => setInformarCargos({ ...informarCargos, [k]: e.target.checked })}
+                        />
+                        {l}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
                 {ultimo && (
                   <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: '600', color: '#f59e0b' }}>
                     ⚠️ Já foi enviado um aviso em {fmtEnvio(ultimo)}. Enviar novamente?
