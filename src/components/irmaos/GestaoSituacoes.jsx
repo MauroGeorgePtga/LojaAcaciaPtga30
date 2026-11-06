@@ -231,7 +231,7 @@ export default function GestaoSituacoes({ irmaId }) {
   const getTipoLabel = (tipo) => {
     const labels = {
       'licenca': 'Licença',
-      'desligado': 'Desligado',
+      'desligado': 'Quite Placet',
       'ex_oficio': 'Ex-Ofício',
       'suspenso': 'Suspenso',
       'irregular': 'Irregular'
@@ -419,7 +419,7 @@ export default function GestaoSituacoes({ irmaId }) {
                   className="w-full px-3 py-2 border rounded focus:outline-none" style={{background:"var(--color-surface-2)",color:"var(--color-text)",border:"1px solid var(--color-border)"}}
                 >
                   <option value="licenca">Licença</option>
-                  <option value="desligado">Desligado (Transferência)</option>
+                  <option value="desligado">Quite Placet (Transferência)</option>
                   <option value="ex_oficio">Ex-Ofício</option>
                   <option value="suspenso">Suspenso</option>
                   <option value="irregular">Irregular</option>
