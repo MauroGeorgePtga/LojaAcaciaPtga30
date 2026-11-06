@@ -31,12 +31,15 @@ const GRUPOS = {
   vencendo:  { label: `Vencem em ${DIAS_AVISO} dias`,  sub: 'ou menos',      cor: '#f59e0b', ordem: 1 },
   vigente:   { label: 'Vigentes',            sub: 'com prazo > 10 dias',     cor: '#10b981', ordem: 2 },
   futura:    { label: 'Agendadas',           sub: 'ainda não iniciaram',     cor: '#3b82f6', ordem: 3 },
-  sem_prazo: { label: 'Sem data final',      sub: 'ex.: Quite Placet',       cor: '#64748b', ordem: 4 },
+  sem_prazo: { label: 'Em vigor',            sub: 'sem data final',          cor: '#64748b', ordem: 4 },
   encerrada: { label: 'Encerradas',          sub: '',                        cor: '#94a3b8', ordem: 5 },
   cancelada: { label: 'Canceladas',          sub: '',                        cor: '#94a3b8', ordem: 6 },
 };
-const GRUPOS_CARTAO = ['vencida', 'vencendo', 'vigente', 'futura', 'sem_prazo'];
-const GRUPOS_ANDAMENTO = GRUPOS_CARTAO;
+// Abas: com data final (controle de vencimento) x prazo indefinido (Quite Placet, Irregular...)
+const ABAS = {
+  prazo:      { label: 'Com data final',   grupos: ['vencida', 'vencendo', 'vigente', 'futura'] },
+  indefinido: { label: 'Prazo indefinido', grupos: ['sem_prazo', 'futura'] },
+};
 
 const classificar = (sit, hoje) => {
   if (sit.status === 'cancelada') return { grupo: 'cancelada', dias: null };
@@ -83,6 +86,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
   const [loading, setLoading] = useState(true);
   const [erroCarga, setErroCarga] = useState('');
 
+  const [aba, setAba] = useState('prazo'); // 'prazo' | 'indefinido'
   const [grupoSel, setGrupoSel] = useState('andamento'); // 'andamento' | grupo
   const [tipoSel, setTipoSel] = useState('todos');
   const [busca, setBusca] = useState('');
@@ -131,15 +135,33 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
       });
   }, [situacoes, irmaos, hoje]);
 
+  // Aba: com data final x prazo indefinido (sem data final)
+  const registrosAba = useMemo(
+    () => registros.filter((r) => (aba === 'prazo' ? !!r.data_fim : !r.data_fim)),
+    [registros, aba]
+  );
+
+  // Quantidade em andamento de cada aba (selo nas abas)
+  const qtdAbas = useMemo(() => {
+    const q = { prazo: 0, indefinido: 0 };
+    registros.forEach((r) => {
+      const k = r.data_fim ? 'prazo' : 'indefinido';
+      if (ABAS[k].grupos.includes(r.grupo)) q[k] += 1;
+    });
+    return q;
+  }, [registros]);
+
+  const trocarAba = (k) => { setAba(k); setGrupoSel('andamento'); };
+
   // Filtros de tipo e busca (valem para os cartões e para a lista)
   const baseFiltrada = useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return registros.filter((r) => {
+    return registrosAba.filter((r) => {
       if (tipoSel !== 'todos' && r.tipo_situacao !== tipoSel) return false;
       if (q && !String(r.irmao.nome || '').toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [registros, tipoSel, busca]);
+  }, [registrosAba, tipoSel, busca]);
 
   const contagem = useMemo(() => {
     const c = {};
@@ -150,7 +172,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
 
   const lista = useMemo(() => {
     const visiveis = baseFiltrada.filter((r) =>
-      grupoSel === 'andamento' ? GRUPOS_ANDAMENTO.includes(r.grupo) : r.grupo === grupoSel
+      grupoSel === 'andamento' ? ABAS[aba].grupos.includes(r.grupo) : r.grupo === grupoSel
     );
     return visiveis.sort((a, b) => {
       if (grupoSel === 'encerrada' || grupoSel === 'cancelada') {
@@ -164,7 +186,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
       if (fa !== fb) return fa.localeCompare(fb);
       return String(a.irmao.nome).localeCompare(String(b.irmao.nome));
     });
-  }, [baseFiltrada, grupoSel]);
+  }, [baseFiltrada, grupoSel, aba]);
 
   // ── Ações ───────────────────────────────────────────────────────────────────
   // Sem licença em vigor → cadastro do irmão volta a "Regular" (só se estava como licenciado)
@@ -255,7 +277,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
       <div>
         <h2 style={{ fontSize: '1.5rem', fontWeight: '700', color: 'var(--color-text)', margin: 0 }}>🗓️ Licenças e Situações</h2>
         <p style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem', fontSize: '0.875rem' }}>
-          Controle de licenças, Quite Placet, suspensões e demais situações dos irmãos
+          Licenças e situações com data final, e situações de prazo indefinido (Quite Placet, Irregular)
         </p>
       </div>
 
@@ -265,9 +287,30 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
         </div>
       )}
 
+      {/* Abas */}
+      <div role="tablist" style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--color-border)' }}>
+        {Object.entries(ABAS).map(([k, a]) => (
+          <button
+            key={k} type="button" role="tab" aria-selected={aba === k}
+            onClick={() => trocarAba(k)}
+            style={{
+              padding: '0.6rem 1.25rem', fontWeight: '600', fontSize: '0.875rem', border: 'none', cursor: 'pointer',
+              background: 'transparent', borderRadius: 0, marginBottom: '-1px',
+              borderBottom: aba === k ? '3px solid var(--color-accent)' : '3px solid transparent',
+              color: aba === k ? 'var(--color-accent)' : 'var(--color-text-muted)',
+            }}
+          >
+            {a.label}
+            <span style={{ marginLeft: '0.5rem', fontSize: '0.72rem', fontWeight: '700', padding: '0.1rem 0.5rem', borderRadius: '999px', background: 'var(--color-surface-2)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
+              {qtdAbas[k]}
+            </span>
+          </button>
+        ))}
+      </div>
+
       {/* Cartões-resumo (clicáveis = filtro) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
-        {GRUPOS_CARTAO.map((g) => {
+        {ABAS[aba].grupos.map((g) => {
           const info = GRUPOS[g];
           const ativo = grupoSel === g;
           return (
@@ -308,7 +351,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
             { id: 'andamento', label: 'Em andamento' },
             { id: 'encerrada', label: `Encerradas (${contagem.encerrada})` },
             { id: 'cancelada', label: `Canceladas (${contagem.cancelada})` },
-          ].map((b) => (
+          ].filter((b) => !(aba === 'indefinido' && b.id === 'encerrada')).map((b) => (
             <button
               key={b.id} type="button" aria-pressed={grupoSel === b.id}
               onClick={() => setGrupoSel(b.id)}
@@ -328,8 +371,11 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
 
       <div style={{ ...sCard, background: 'var(--color-accent-bg)', borderColor: 'var(--color-accent)', padding: '0.65rem 1rem' }}>
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text)' }}>
-          ✉️ Situações com data final geram aviso automático por e-mail a <strong>10 dias</strong>, <strong>3 dias</strong> e <strong>no dia</strong> do vencimento, para Venerável, Secretário, Orador e Administrador.
-          Quite Placet não tem data final e não gera aviso.
+          {aba === 'prazo' ? (
+            <>✉️ Situações com data final geram aviso automático por e-mail a <strong>10 dias</strong>, <strong>3 dias</strong> e <strong>no dia</strong> do vencimento, para Venerável, Secretário, Orador e Administrador.</>
+          ) : (
+            <>ℹ️ Situações sem data final (Quite Placet, Irregular...) ficam apenas para consulta e não geram aviso por e-mail.</>
+          )}
         </p>
       </div>
 
