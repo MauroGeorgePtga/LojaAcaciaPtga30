@@ -457,7 +457,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
       <div style={{ ...sCard, background: 'var(--color-accent-bg)', borderColor: 'var(--color-accent)', padding: '0.65rem 1rem' }}>
         <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text)' }}>
           {aba === 'prazo' ? (
-            <>✉️ Situações com data final geram aviso automático por e-mail a <strong>10 dias</strong>, <strong>3 dias</strong> e <strong>no dia</strong> do vencimento, para Venerável, Secretário, Orador e Administrador. Vencida e não encerrada gera lembrete semanal.</>
+            <>✉️ Situações com data final geram aviso automático por e-mail a <strong>10 dias</strong>, <strong>3 dias</strong> e <strong>no dia</strong> do vencimento, para Venerável, Secretário, Orador e Administrador, e também ao próprio irmão (se tiver e-mail). Vencida e não encerrada gera lembrete semanal.</>
           ) : (
             <>ℹ️ Situações sem data final (Quite Placet, Irregular...) ficam apenas para consulta e não geram aviso por e-mail.</>
           )}
