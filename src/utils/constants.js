@@ -40,7 +40,7 @@ export const STATUS_IRMAOS = [
   { value: 'irregular', label: 'Irregular' },
   { value: 'licenciado', label: 'Licenciado' },
   { value: 'suspenso', label: 'Suspenso' },
-  { value: 'desligado', label: 'Desligado' },
+  { value: 'desligado', label: 'Quite Placet' },
   { value: 'excluido', label: 'Excluido' },
   { value: 'falecido', label: 'Falecido' },
   { value: 'ex_oficio', label: 'Ex-Oficio' }
