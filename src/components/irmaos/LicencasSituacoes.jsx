@@ -548,7 +548,7 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
                   {previa.texto}
                 </pre>
                 <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-                  Respostas do irmão vão para o Secretário; o Administrador recebe cópia oculta; Venerável, Secretário e Orador são informados por e-mail de que o irmão foi avisado.
+                  Respostas do irmão vão para o Secretário; o Administrador recebe cópia oculta; Venerável, Secretário, Orador e Administrador são informados por e-mail de que o irmão foi avisado.
                 </p>
                 {ultimo && (
                   <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: '600', color: '#f59e0b' }}>
