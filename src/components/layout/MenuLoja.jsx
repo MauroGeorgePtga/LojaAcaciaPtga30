@@ -35,6 +35,7 @@ export default function MenuLoja({
       { pagina: 'cadastro', icone: '➕', label: 'Cadastrar', mostrar: editar('cadastro_irmaos') },
       { pagina: 'visualizar', icone: '👁️', label: 'Visualizar', mostrar: true },
       { pagina: 'quadro', icone: '📋', label: 'Quadro', mostrar: ver('cadastro_irmaos') },
+      { pagina: 'licencas-situacoes', icone: '🗓️', label: 'Licenças e Situações', mostrar: ver('cadastro_irmaos') },
       { pagina: 'comendas', icone: '🎖️', label: 'Comendas', mostrar: ver('comendas') },
       { pagina: 'altos-graus', icone: '🔺', label: 'Altos Graus', mostrar: true },
       { pagina: 'gerenciar-graus', icone: '⚙️', label: 'Gerenciar Graus', mostrar: editar('usuarios') },
