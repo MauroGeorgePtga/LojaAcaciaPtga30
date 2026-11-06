@@ -66,6 +66,44 @@ const corDoPrazo = (grupo, dias) => {
   return GRUPOS[grupo]?.cor || 'var(--color-text-muted)';
 };
 
+const fmtEnvio = (iso) => new Date(iso).toLocaleDateString('pt-BR');
+
+// Prévia do e-mail ao irmão (mesmo texto montado na Edge Function avisar-vencimento-licencas)
+const montarPrevia = (r) => {
+  const label = TIPOS[r.tipo_situacao] || r.tipo_situacao;
+  const nomeSit = r.tipo_situacao === 'licenca' ? 'licença' : `situação (${label})`;
+  const vencida = r.dias < 0;
+  const quando = vencida
+    ? `venceu há ${plural(-r.dias, 'dia', 'dias')}`
+    : r.dias === 0 ? 'vence hoje' : `vence em ${plural(r.dias, 'dia', 'dias')}`;
+  const assunto = vencida
+    ? `Sua ${nomeSit} venceu — regularização de situação — Loja Acácia nº 30`
+    : `Sua ${nomeSit} ${quando} — Loja Acácia nº 30`;
+  const texto = [
+    `Prezado Ir. ${r.irmao.nome},`,
+    '',
+    vencida
+      ? 'Informamos que a sua situação abaixo encontra-se VENCIDA:'
+      : 'Informamos que a sua situação abaixo, registrada na Loja, está próxima do vencimento:',
+    '',
+    `• Situação: ${label}`,
+    `• Início: ${fmtData(r.data_inicio)}`,
+    `• Término: ${fmtData(r.data_fim)} — ${quando}`,
+    '',
+    vencida
+      ? 'Pedimos que entre em contato com a Secretaria o quanto antes para informar o seu retorno às atividades ou para solicitar uma nova licença ou outra situação.'
+      : 'Pedimos que entre em contato com a Secretaria para nos informar se pretende solicitar a prorrogação ou se retornará às atividades na data de término.',
+    '',
+    vencida
+      ? 'A regularização é importante para que o seu cadastro e a sua frequência estejam atualizados e para evitar pendências no controle da Loja.'
+      : 'Essa definição é importante para mantermos o seu cadastro, o controle de presença e o quadro da Loja corretos, e para que uma eventual prorrogação seja formalizada a tempo.',
+    '',
+    'Fraterno abraço,',
+    'Secretaria — A∴R∴L∴S∴ Acácia de Paranatinga nº 30',
+  ].join('\n');
+  return { assunto, texto };
+};
+
 // Paginação em blocos de 1000 (limite de linhas do Supabase)
 const paginar = async (montar) => {
   let todos = [];
@@ -94,6 +132,10 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
   const [modalPrazo, setModalPrazo] = useState(null); // { sit, novaData }
   const [salvando, setSalvando] = useState(false);
 
+  const [avisos, setAvisos] = useState({}); // 'situacaoId|data_fim' → data do último aviso ao irmão
+  const [modalAviso, setModalAviso] = useState(null); // registro a avisar
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
+
   const hoje = hojeLocal();
 
   const avisoOk = (m) => (showSuccess ? showSuccess(m) : window.alert(m));
@@ -105,12 +147,27 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
       setErroCarga('');
       const [sits, irms] = await Promise.all([
         paginar(() => supabase.from('historico_situacoes').select('*').order('id', { ascending: true })),
-        paginar(() => supabase.from('irmaos').select('id, nome, situacao, data_falecimento').order('id', { ascending: true })),
+        paginar(() => supabase.from('irmaos').select('id, nome, email, situacao, data_falecimento').order('id', { ascending: true })),
       ]);
       const mapa = {};
       irms.forEach((i) => { mapa[i.id] = i; });
       setIrmaos(mapa);
       setSituacoes(sits);
+
+      // Último aviso enviado ao irmão (se a tabela ainda não existir, a tela segue normalmente)
+      try {
+        const av = await paginar(() => supabase.from('aviso_irmao_situacao')
+          .select('situacao_id, data_fim, enviado_em').order('id', { ascending: true }));
+        const m = {};
+        av.forEach((a) => {
+          const k = `${a.situacao_id}|${a.data_fim}`;
+          if (!m[k] || a.enviado_em > m[k]) m[k] = a.enviado_em;
+        });
+        setAvisos(m);
+      } catch (e) {
+        console.warn('aviso_irmao_situacao indisponível:', e);
+        setAvisos({});
+      }
     } catch (e) {
       console.error('Erro ao carregar licenças/situações:', e);
       setErroCarga('Não foi possível carregar os dados.');
@@ -260,6 +317,28 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
       avisoErro('Erro ao alterar prazo: ' + (e.message || e));
     } finally {
       setSalvando(false);
+    }
+  };
+
+  const enviarAviso = async () => {
+    if (!modalAviso) return;
+    try {
+      setEnviandoAviso(true);
+      const { data, error } = await supabase.functions.invoke('avisar-vencimento-licencas', {
+        body: { modo: 'irmao', situacao_id: modalAviso.id },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.erro || 'Erro desconhecido');
+      avisoOk(`Aviso enviado para ${modalAviso.irmao.nome}!` + (data.resposta_para
+        ? ` Respostas irão para ${data.resposta_para}.`
+        : ' Atenção: não há Secretário ativo com e-mail; respostas irão ao remetente do sistema.'));
+      setModalAviso(null);
+      carregar();
+    } catch (e) {
+      console.error('Erro ao enviar aviso ao irmão:', e);
+      avisoErro('Erro ao enviar aviso: ' + (e.message || e));
+    } finally {
+      setEnviandoAviso(false);
     }
   };
 
@@ -415,6 +494,9 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
                     <div><strong>Período:</strong> {fmtData(r.data_inicio)}{r.data_fim ? ` → ${fmtData(r.data_fim)}` : ' → sem data final'}</div>
                     {r.motivo && <div><strong>Motivo:</strong> {r.motivo}</div>}
                     {r.destino_transferencia && <div><strong>Destino:</strong> {r.destino_transferencia}</div>}
+                    {avisos[`${r.id}|${r.data_fim}`] && (
+                      <div style={{ color: 'var(--color-text-muted)' }}>✉️ Último aviso ao irmão: {fmtEnvio(avisos[`${r.id}|${r.data_fim}`])}</div>
+                    )}
                     {r.documento && <div><strong>Documento:</strong> {r.documento}</div>}
                     {r.grupo === 'vencida' && cadastroLicenciado && (
                       <div style={{ color: '#ef4444', fontWeight: '600' }}>⚠️ O cadastro do irmão ainda consta como Licenciado — encerre para regularizar.</div>
@@ -424,6 +506,13 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
 
                 {podeAgir && (
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {['vencida', 'vencendo'].includes(r.grupo) && (
+                      <button type="button" onClick={() => setModalAviso(r)} disabled={!r.irmao.email}
+                        title={r.irmao.email ? `Enviar aviso para ${r.irmao.email}` : 'Irmão sem e-mail cadastrado'}
+                        style={{ ...sBtn('#10b981', 'rgba(16,185,129,0.15)', 'rgba(16,185,129,0.3)'), opacity: r.irmao.email ? 1 : 0.5, cursor: r.irmao.email ? 'pointer' : 'not-allowed' }}>
+                        ✉️ Avisar irmão{r.irmao.email ? '' : ' (sem e-mail)'}
+                      </button>
+                    )}
                     <button type="button" onClick={() => setModalPrazo({ sit: r, novaData: r.data_fim || '' })}
                       style={sBtn('var(--color-accent)', 'var(--color-accent-bg)', 'var(--color-accent)')}>
                       Alterar prazo
@@ -439,6 +528,48 @@ export default function LicencasSituacoes({ podeEditar = false, showSuccess, sho
           })}
         </div>
       )}
+
+      {/* Modal: avisar irmão */}
+      {modalAviso && (() => {
+        const previa = montarPrevia(modalAviso);
+        const ultimo = avisos[`${modalAviso.id}|${modalAviso.data_fim}`];
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
+            <div className="rounded-lg w-full max-w-xl" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ background: 'var(--color-accent)', padding: '1rem 1.5rem' }}>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: '700', color: '#fff', margin: 0 }}>✉️ Avisar irmão</h3>
+              </div>
+              <div className="p-6" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-text)', lineHeight: 1.6 }}>
+                  <div><strong>Para:</strong> {modalAviso.irmao.nome} &lt;{modalAviso.irmao.email}&gt;</div>
+                  <div><strong>Assunto:</strong> {previa.assunto}</div>
+                </div>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.82rem', lineHeight: 1.55, padding: '0.75rem', background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text)' }}>
+                  {previa.texto}
+                </pre>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                  Respostas do irmão vão para o Secretário; o Administrador recebe cópia oculta.
+                </p>
+                {ultimo && (
+                  <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: '600', color: '#f59e0b' }}>
+                    ⚠️ Já foi enviado um aviso em {fmtEnvio(ultimo)}. Enviar novamente?
+                  </p>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                  <button type="button" onClick={() => setModalAviso(null)} disabled={enviandoAviso}
+                    style={{ ...sBtn('var(--color-text)', 'var(--color-surface-2)', 'var(--color-border)'), padding: '0.5rem 1rem' }}>
+                    Cancelar
+                  </button>
+                  <button type="button" onClick={enviarAviso} disabled={enviandoAviso}
+                    style={{ ...sBtn('#fff', 'var(--color-accent)', 'var(--color-accent)'), padding: '0.5rem 1rem' }}>
+                    {enviandoAviso ? 'Enviando...' : 'Enviar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal: alterar prazo */}
       {modalPrazo && (
