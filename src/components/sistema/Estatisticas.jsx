@@ -18,6 +18,9 @@ const fmtR = (v) => 'R$ ' + Number(v||0).toLocaleString('pt-BR', {minimumFractio
 const fmtP = (v) => Number(v||0).toFixed(1) + '%';
 const MESES_ABR = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 const anoAtual = new Date().getFullYear();
+const MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_SEM = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+const GRAU_SESSAO = {1:'Aprendiz', 2:'Companheiro', 3:'Mestre', 4:'Administrativa'};
 
 // ── Card de indicador ────────────────────────────────────────────────────────
 const Card = ({label, valor, sub, cor='var(--color-accent)', icon, compacto=false}) => (
@@ -82,6 +85,8 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
   const [comodatosAtivos, setComodatosAtivos] = useState([]);
   const [equipamentos, setEquipamentos] = useState([]);
   const [historicoSituacoes, setHistoricoSituacoes] = useState([]);
+  const [sessoesMes, setSessoesMes] = useState([]);     // sessões do MÊS ATUAL (sempre, qualquer que seja o ano selecionado)
+  const [presencasMes, setPresencasMes] = useState([]);
   const [saldoBancarioAtual, setSaldoBancarioAtual] = useState(null);
 
   const isMestre = !grauUsuario || ['mestre','mestre instalado','admin'].includes((grauUsuario||'').toLowerCase());
@@ -100,6 +105,40 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
       if (lista.length > 0) { setAnosDisp(lista); setAnoSel(lista[0]); }
     };
     buscarAnos();
+  }, []);
+
+  // Presença por sessão do mês atual — sempre o mês corrente, independente do ano selecionado
+  useEffect(() => {
+    const carregarMesAtual = async () => {
+      try {
+        const hoje = new Date();
+        const ano = hoje.getFullYear();
+        const mes = hoje.getMonth();
+        const pad = (n) => String(n).padStart(2, '0');
+        const ini = `${ano}-${pad(mes + 1)}-01`;
+        const fim = `${ano}-${pad(mes + 1)}-${pad(new Date(ano, mes + 1, 0).getDate())}`;
+        const { data: sess } = await supabase
+          .from('sessoes_presenca').select('id,data_sessao,grau_sessao_id')
+          .gte('data_sessao', ini).lte('data_sessao', fim).order('data_sessao');
+        setSessoesMes(sess || []);
+
+        const ids = (sess || []).map(x => x.id);
+        let registros = [];
+        if (ids.length > 0) {
+          let de = 0;
+          while (true) {
+            const { data: lote } = await supabase
+              .from('registros_presenca').select('sessao_id,membro_id,presente,justificativa')
+              .in('sessao_id', ids).range(de, de + 999);
+            registros = registros.concat(lote || []);
+            if (!lote || lote.length < 1000) break;
+            de += 1000;
+          }
+        }
+        setPresencasMes(registros);
+      } catch (e) { console.error('Erro ao carregar presença do mês atual:', e); }
+    };
+    carregarMesAtual();
   }, []);
 
   // Saldo Bancário atual — SEMPRE histórico completo (não filtra por ano
@@ -380,6 +419,35 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
     });
     presencaMensal.forEach(m => { m.taxa = m.eleg > 0 ? Math.round(m.presentes / m.eleg * 100) : 0; });
 
+    // ── Presença por SESSÃO do mês atual (só sessões até hoje; mesma elegibilidade do gráfico mensal) ──
+    const agora = new Date();
+    const hojeStr = `${agora.getFullYear()}-${String(agora.getMonth()+1).padStart(2,'0')}-${String(agora.getDate()).padStart(2,'0')}`;
+    const presMapMes = {}; const justMapMes = {}; const sessoesComRegistro = new Set();
+    presencasMes.forEach(p => {
+      presMapMes[`${p.sessao_id}_${p.membro_id}`] = p.presente;
+      justMapMes[`${p.sessao_id}_${p.membro_id}`] = p.justificativa;
+      sessoesComRegistro.add(p.sessao_id);
+    });
+    const presencaSessoesMes = sessoesMes.filter(sm => sm.data_sessao <= hojeStr).map(sm => {
+      const dataSessao = new Date(sm.data_sessao + 'T00:00:00');
+      let eleg = 0, presentes = 0, justificados = 0;
+      irmaos.forEach(i => {
+        if (!elegivelNaData(i, dataSessao, sm.grau_sessao_id)) return;
+        eleg++;
+        if (presMapMes[`${sm.id}_${i.id}`]) presentes++;
+        else if (justMapMes[`${sm.id}_${i.id}`]) justificados++;
+      });
+      return {
+        id: sm.id, data: sm.data_sessao, grau: sm.grau_sessao_id,
+        eleg, presentes, justificados, ausentes: eleg - presentes - justificados,
+        taxa: eleg > 0 ? Math.round(presentes / eleg * 100) : 0,
+        semRegistro: !sessoesComRegistro.has(sm.id),
+      };
+    });
+    const comReg = presencaSessoesMes.filter(x => !x.semRegistro);
+    const somaEleg = comReg.reduce((a, x) => a + x.eleg, 0);
+    const taxaMesAtual = somaEleg > 0 ? Math.round(comReg.reduce((a, x) => a + x.presentes, 0) / somaEleg * 100) : 0;
+
     // Taxa geral do ano — MÉDIA DAS TAXAS INDIVIDUAIS de cada irmão (mesmo
     // método do relatório em PDF, do Dashboard "Média Presença" e do
     // boletim por e-mail), não soma ponderada por sessão.
@@ -499,13 +567,13 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
     return {
       ativos:totalAtivos,regulares,licenciados,irregulares,suspensos,desligados,falecidos,
       porGrau,iniciadosAno,exaltadosAno,elevadosAno,
-      presencaMensal,taxaGeralAno,graficoGrau,rankingPresenca,
+      presencaMensal,presencaSessoesMes,taxaMesAtual,taxaGeralAno,graficoGrau,rankingPresenca,
       finMensal,saldoMensal,totalReceita,totalDespesa,graficoRecCat,
       irmaosEmComissao,percComissao,caridade:(caridade||[]).length,
       candAtivos,candAprovados,
       familiasTotal,familiasAtivas,pessoasComodato,equipamentosTotal,equipamentosEmprestados,
     };
-  }, [irmaos,sessoes,presencas,lancamentos,categorias,comissoes,caridade,candidatos,familias,comodatosAtivos,equipamentos,historicoSituacoes,anoSel,loading]);
+  }, [irmaos,sessoes,presencas,lancamentos,categorias,comissoes,caridade,candidatos,familias,comodatosAtivos,equipamentos,historicoSituacoes,sessoesMes,presencasMes,anoSel,loading]);
 
   const sBtn = (ativo) => ({
     padding:'0.35rem 0.9rem',borderRadius:'var(--radius-md)',border:'1px solid var(--color-border)',
@@ -635,6 +703,57 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
             </ResponsiveContainer>
             ) : <GraficoVazio/>;
           })()}
+        </div>
+
+        {/* Presença por sessão — mês atual (sempre o mês corrente) */}
+        <div style={{marginBottom:'1.25rem',background:'var(--color-surface-2)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',padding:'1rem'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',flexWrap:'wrap',gap:'0.5rem',marginBottom:'0.75rem'}}>
+            <p style={{fontWeight:700,fontSize:'0.82rem',color:'var(--color-accent)',margin:0}}>
+              📆 Presença por Sessão — {MESES_NOME[new Date().getMonth()]} de {new Date().getFullYear()} (mês atual)
+            </p>
+            {stats.presencaSessoesMes.some(x => !x.semRegistro) && (
+              <span style={{fontSize:'0.75rem',color:'var(--color-text-muted)'}}>
+                Média do mês: <strong style={{color:'var(--color-text)'}}>{stats.taxaMesAtual}%</strong> · {stats.presencaSessoesMes.length} sessão(ões)
+              </span>
+            )}
+          </div>
+          {stats.presencaSessoesMes.length === 0 ? (
+            <p style={{textAlign:'center',color:'var(--color-text-muted)',fontSize:'0.85rem',padding:'1rem 0',margin:0}}>
+              Nenhuma sessão realizada em {MESES_NOME[new Date().getMonth()].toLowerCase()} até agora.
+            </p>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))',gap:'0.75rem'}}>
+              {stats.presencaSessoesMes.map(x => {
+                const cor = x.taxa >= 70 ? VERDE : x.taxa >= 50 ? LARANJA : VERMELHO;
+                const [, mm, dd] = x.data.split('-');
+                const dia = DIAS_SEM[new Date(x.data + 'T00:00:00').getDay()];
+                return (
+                  <div key={x.id} style={{background:'var(--color-surface)',border:'1px solid var(--color-border)',borderTop:`3px solid ${x.semRegistro ? 'var(--color-border)' : cor}`,borderRadius:'var(--radius-lg)',padding:'0.85rem'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'0.5rem'}}>
+                      <span style={{fontWeight:700,fontSize:'0.85rem',color:'var(--color-text)'}}>{dd}/{mm} <span style={{fontWeight:500,color:'var(--color-text-muted)'}}>({dia})</span></span>
+                      <span style={{fontSize:'0.68rem',fontWeight:700,padding:'0.1rem 0.5rem',borderRadius:'999px',background:'var(--color-surface-2)',color:'var(--color-text-muted)',border:'1px solid var(--color-border)'}}>
+                        {GRAU_SESSAO[x.grau] || 'Sessão'}
+                      </span>
+                    </div>
+                    {x.semRegistro ? (
+                      <p style={{margin:'0.6rem 0 0',fontSize:'0.8rem',color:'var(--color-text-muted)'}}>Sem registro de presença</p>
+                    ) : (
+                      <>
+                        <p style={{margin:'0.5rem 0 0.35rem',fontSize:'1.6rem',fontWeight:800,color:cor,lineHeight:1.1}}>{x.taxa}%</p>
+                        <div style={{height:'6px',borderRadius:'999px',background:'var(--color-border)',overflow:'hidden'}}>
+                          <div style={{width:`${Math.min(100, x.taxa)}%`,height:'100%',background:cor}}/>
+                        </div>
+                        <p style={{margin:'0.5rem 0 0',fontSize:'0.72rem',color:'var(--color-text-muted)'}}>
+                          ✅ {x.presentes} presentes · 📝 {x.justificados} justif. · ❌ {x.ausentes} ausentes
+                        </p>
+                        <p style={{margin:'0.1rem 0 0',fontSize:'0.68rem',color:'var(--color-text-muted)'}}>{x.eleg} irmãos aptos na sessão</p>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Barras por grau + ranking */}
