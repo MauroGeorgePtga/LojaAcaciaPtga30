@@ -99,6 +99,8 @@ const obterEmojiPessoa = (idade, sexo, tipo = null) => {
 
 export default function Aniversariantes({ permissoes }) {
   const podeEnviarEmail = permissoes?.canEditFinancial || permissoes?.canManageUsers || false;
+  // Relatórios em PDF: só quem tem alguma permissão de edição; acesso simples apenas visualiza
+  const podeGerarRelatorio = !!(permissoes?.canEdit || permissoes?.canEditFinancial || permissoes?.canManageUsers);
   const [aniversariantes, setAniversariantes] = useState([]);
   const [filtro, setFiltro] = useState('hoje');
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
@@ -484,6 +486,7 @@ export default function Aniversariantes({ permissoes }) {
   };
 
   const gerarRelatorioPDF = async () => {
+    if (!podeGerarRelatorio) return;
     const doc = new jsPDF();
     const hoje = new Date();
     
@@ -1970,7 +1973,8 @@ export default function Aniversariantes({ permissoes }) {
             }}>
               ⚙️ Gerenciar Eventos
             </button>
-            <button onClick={gerarRelatorioPDF} disabled={loading} style={{
+            {podeGerarRelatorio && (
+<button onClick={gerarRelatorioPDF} disabled={loading} style={{
               display: 'flex', alignItems: 'center', gap: '0.4rem',
               padding: '0.55rem 1rem', borderRadius: 'var(--radius-md)',
               background: 'rgba(201,168,76,0.12)', border: '1px solid rgba(201,168,76,0.35)',
@@ -1978,6 +1982,7 @@ export default function Aniversariantes({ permissoes }) {
             }}>
               📄 Gerar PDF
             </button>
+)}
           </div>
         </div>
 
@@ -2461,6 +2466,7 @@ export default function Aniversariantes({ permissoes }) {
         };
 
         const gerarPDFVisaoGeral = (felic, fam, com, inMem, labelPeriodo) => {
+          if (!podeGerarRelatorio) return;
           const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
           const margin = 14; const colRight = 196; let y = 14;
           const nomesLoja = dadosLoja?.nome_loja || 'ARLS Acácia de Paranatinga nº 30';
@@ -2632,10 +2638,12 @@ export default function Aniversariantes({ permissoes }) {
                   ))}
                 </div>
                 <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: 'auto' }}>📍 {label}</span>
-                <button onClick={() => gerarPDFVisaoGeral(felicitacoes, familia, comemorativas, inMemoriam, label)}
+                {podeGerarRelatorio && (
+<button onClick={() => gerarPDFVisaoGeral(felicitacoes, familia, comemorativas, inMemoriam, label)}
                   style={{ padding: '0.38rem 0.85rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.1)', color: '#6366f1', borderRadius: 'var(--radius-md)' }}>
                   📄 Gerar PDF
                 </button>
+)}
               </div>
               {/* Seletor de semana do mês atual */}
               {periodoRelatorio === 'semanal' && (() => {
