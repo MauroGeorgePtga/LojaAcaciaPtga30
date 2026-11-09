@@ -21,6 +21,13 @@ const anoAtual = new Date().getFullYear();
 const MESES_NOME = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const DIAS_SEM = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const GRAU_SESSAO = {1:'Aprendiz', 2:'Companheiro', 3:'Mestre', 4:'Administrativa'};
+// Classificação da sessão (mesmas cores do cadastro de sessões)
+const COR_CLASSIFICACAO = {
+  'Econômica':      ['rgba(16,185,129,0.12)', '#10b981', 'rgba(16,185,129,0.3)'],
+  'Especial':       ['rgba(139,92,246,0.12)', '#8b5cf6', 'rgba(139,92,246,0.3)'],
+  'Magna':          ['rgba(245,158,11,0.12)', '#f59e0b', 'rgba(245,158,11,0.3)'],
+  'Extraordinária': ['rgba(239,68,68,0.12)',  '#ef4444', 'rgba(239,68,68,0.3)'],
+};
 
 // ── Card de indicador ────────────────────────────────────────────────────────
 const Card = ({label, valor, sub, cor='var(--color-accent)', icon, compacto=false}) => (
@@ -118,7 +125,7 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
         const ini = `${ano}-${pad(mes + 1)}-01`;
         const fim = `${ano}-${pad(mes + 1)}-${pad(new Date(ano, mes + 1, 0).getDate())}`;
         const { data: sess } = await supabase
-          .from('sessoes_presenca').select('id,data_sessao,grau_sessao_id')
+          .from('sessoes_presenca').select('id,data_sessao,grau_sessao_id,classificacao_id,classificacoes_sessao:classificacao_id(nome)')
           .gte('data_sessao', ini).lte('data_sessao', fim).order('data_sessao');
         setSessoesMes(sess || []);
 
@@ -439,6 +446,7 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
       });
       return {
         id: sm.id, data: sm.data_sessao, grau: sm.grau_sessao_id,
+        classificacao: (Array.isArray(sm.classificacoes_sessao) ? sm.classificacoes_sessao[0]?.nome : sm.classificacoes_sessao?.nome) || null,
         eleg, presentes, justificados, ausentes: eleg - presentes - justificados,
         taxa: eleg > 0 ? Math.round(presentes / eleg * 100) : 0,
         semRegistro: !sessoesComRegistro.has(sm.id),
@@ -731,9 +739,19 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
                   <div key={x.id} style={{background:'var(--color-surface)',border:'1px solid var(--color-border)',borderTop:`3px solid ${x.semRegistro ? 'var(--color-border)' : cor}`,borderRadius:'var(--radius-lg)',padding:'0.85rem'}}>
                     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'0.5rem'}}>
                       <span style={{fontWeight:700,fontSize:'0.85rem',color:'var(--color-text)'}}>{dd}/{mm} <span style={{fontWeight:500,color:'var(--color-text-muted)'}}>({dia})</span></span>
-                      <span style={{fontSize:'0.68rem',fontWeight:700,padding:'0.1rem 0.5rem',borderRadius:'999px',background:'var(--color-surface-2)',color:'var(--color-text-muted)',border:'1px solid var(--color-border)'}}>
-                        {GRAU_SESSAO[x.grau] || 'Sessão'}
-                      </span>
+                      <div style={{display:'flex',gap:'0.3rem',flexWrap:'wrap',justifyContent:'flex-end'}}>
+                        {x.classificacao && (() => {
+                          const [bg, cor2, borda] = COR_CLASSIFICACAO[x.classificacao] || ['var(--color-surface-2)', 'var(--color-text-muted)', 'var(--color-border)'];
+                          return (
+                            <span style={{fontSize:'0.68rem',fontWeight:700,padding:'0.1rem 0.5rem',borderRadius:'999px',background:bg,color:cor2,border:`1px solid ${borda}`}}>
+                              {x.classificacao}
+                            </span>
+                          );
+                        })()}
+                        <span style={{fontSize:'0.68rem',fontWeight:700,padding:'0.1rem 0.5rem',borderRadius:'999px',background:'var(--color-surface-2)',color:'var(--color-text-muted)',border:'1px solid var(--color-border)'}}>
+                          {GRAU_SESSAO[x.grau] || 'Sessão'}
+                        </span>
+                      </div>
                     </div>
                     {x.semRegistro ? (
                       <p style={{margin:'0.6rem 0 0',fontSize:'0.8rem',color:'var(--color-text-muted)'}}>Sem registro de presença</p>
