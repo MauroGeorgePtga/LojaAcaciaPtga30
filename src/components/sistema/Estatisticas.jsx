@@ -761,10 +761,12 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
                         <div style={{height:'6px',borderRadius:'999px',background:'var(--color-border)',overflow:'hidden'}}>
                           <div style={{width:`${Math.min(100, x.taxa)}%`,height:'100%',background:cor}}/>
                         </div>
-                        <p style={{margin:'0.5rem 0 0',fontSize:'0.72rem',color:'var(--color-text-muted)'}}>
-                          ✅ {x.presentes} presentes · 📝 {x.justificados} justif. · ❌ {x.ausentes} ausentes
-                        </p>
-                        <p style={{margin:'0.1rem 0 0',fontSize:'0.68rem',color:'var(--color-text-muted)'}}>{x.eleg} irmãos aptos na sessão</p>
+                        <div style={{margin:'0.6rem 0 0',fontSize:'0.75rem',lineHeight:1.7,color:'var(--color-text-muted)'}}>
+                          <div><strong style={{color:'var(--color-text)'}}>{x.eleg}</strong> {x.eleg <= 1 ? 'irmão apto' : 'irmãos aptos'} na sessão</div>
+                          <div>✅ {x.presentes} {x.presentes <= 1 ? 'presente' : 'presentes'}</div>
+                          <div>📝 {x.justificados} {x.justificados <= 1 ? 'justificada' : 'justificadas'}</div>
+                          <div>❌ {x.ausentes} {x.ausentes <= 1 ? 'ausente' : 'ausentes'}</div>
+                        </div>
                       </>
                     )}
                   </div>
