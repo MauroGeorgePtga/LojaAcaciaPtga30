@@ -730,7 +730,7 @@ export default function Estatisticas({ grauUsuario, permissoes }) {
               Nenhuma sessão realizada em {MESES_NOME[new Date().getMonth()].toLowerCase()} até agora.
             </p>
           ) : (
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))',gap:'0.75rem'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(230px, 1fr))',gap:'0.75rem'}}>
               {stats.presencaSessoesMes.map(x => {
                 const cor = x.taxa >= 70 ? VERDE : x.taxa >= 50 ? LARANJA : VERMELHO;
                 const [, mm, dd] = x.data.split('-');
