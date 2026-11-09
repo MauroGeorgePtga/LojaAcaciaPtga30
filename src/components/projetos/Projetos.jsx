@@ -102,6 +102,7 @@ export default function Projetos({ showSuccess, showError, permissoes }) {
 
   // Resumo em PDF pra enviar aos irmãos — filtrado por exercício (ou todos).
   const gerarRelatorio = () => {
+    if (!permissoes?.canEdit) return; // relatório só para quem edita projetos
     try {
       const lista = projetos
         .filter(p => anoRelatorio === 'todos' || anoDoProjeto(p) === anoRelatorio)
@@ -129,6 +130,7 @@ export default function Projetos({ showSuccess, showError, permissoes }) {
   };
 
   const abrirModalRelatorio = () => {
+    if (!permissoes?.canEdit) return; // relatório só para quem edita projetos
     const anosReais = [...new Set(projetos.map(anoDoProjeto).filter(a => a !== 'Sem data'))].sort((a, b) => b.localeCompare(a));
     setAnoRelatorio(anosReais[0] || 'todos');
     setModalRelatorio(true);
@@ -482,12 +484,14 @@ export default function Projetos({ showSuccess, showError, permissoes }) {
           <p className="mt-1" style={{color:"var(--color-text-muted)"}}>Gerencie os projetos, campanhas e seus custos</p>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
-          <button
-            onClick={abrirModalRelatorio}
-            style={{padding:"0.6rem 1.25rem",background:"#1e3a5f",color:"#fff",border:"none",borderRadius:"var(--radius-lg)",cursor:"pointer",fontWeight:"700"}}
-          >
-            📄 Relatório
-          </button>
+          {permissoes?.canEdit && (
+            <button
+              onClick={abrirModalRelatorio}
+              style={{padding:"0.6rem 1.25rem",background:"#1e3a5f",color:"#fff",border:"none",borderRadius:"var(--radius-lg)",cursor:"pointer",fontWeight:"700"}}
+            >
+              📄 Relatório
+            </button>
+          )}
           {permissoes?.canEdit && (
             <button
               onClick={() => setMostrarFormulario(!mostrarFormulario)}
