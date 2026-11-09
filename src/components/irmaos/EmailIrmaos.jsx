@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -8,8 +8,12 @@ const TIPOS = [
   { id: 'lembrete_financeiro', label: 'Lembrete Financeiro', emoji: '⚠️', desc: 'Apenas irmãos com saldo devedor' },
   { id: 'cronograma_mes',      label: 'Cronograma do Mês',   emoji: '📅', desc: 'Eventos do mês selecionado enviados aos irmãos' },
   { id: 'vencimento_licencas', label: 'Vencimento de Licenças', emoji: '🗓️', desc: 'Situações com data final a vencer: Venerável, Secretário, Orador e Admin' },
+  { id: 'boas_vindas',        label: 'Boas-vindas',         emoji: '🤝', desc: 'Mensagem de boas-vindas aos irmãos iniciados nos últimos 15 dias' },
   { id: 'boletim_mensal',      label: 'Boletim Mensal',      emoji: '📊', desc: 'Indicadores gerais da Loja: quadro, presença, financeiro e próximos eventos' },
 ];
+
+const DIAS_RECEM_INICIADOS = 15;
+const fmtBR = (d) => (d ? d.split('-').reverse().join('/') : '—');
 
 const FREQ = [
   { id: 'semanal',   label: 'Semanal' },
@@ -40,6 +44,9 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
   const [aba, setAba] = useState('manual');
   const [irmaos, setIrmaos] = useState([]);
   const [irmaosSelec, setIrmaosSelec] = useState([]);
+  const [recemIniciados, setRecemIniciados] = useState([]); // iniciados nos últimos 15 dias (Boas-vindas)
+  const [loadingRecem, setLoadingRecem] = useState(false);
+  const tipoAnteriorRef = useRef('resumo_individual');
   const [tipoSelec, setTipoSelec] = useState('resumo_individual');
   const [opcoesConteudo, setOpcoesConteudo] = useState({ financeiro: true, presenca: true, comissoes: true, eventos: true, cronograma: false });
   const [enviando, setEnviando] = useState(false);
@@ -95,6 +102,54 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
   useEffect(() => {
     if (mesCronograma && tipoSelec === 'cronograma_mes') carregarEventosCronograma(mesCronograma);
   }, [mesCronograma]);
+
+  // Boas-vindas: carrega os iniciados nos últimos 15 dias e pré-seleciona quem tem e-mail e ainda não recebeu
+  useEffect(() => {
+    if (tipoSelec === 'boas_vindas') carregarRecemIniciados();
+    else if (tipoAnteriorRef.current === 'boas_vindas') setIrmaosSelec([]);
+    tipoAnteriorRef.current = tipoSelec;
+  }, [tipoSelec]);
+
+  const carregarRecemIniciados = async () => {
+    setLoadingRecem(true);
+    try {
+      const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const hoje = new Date();
+      const desde = new Date(hoje);
+      desde.setDate(desde.getDate() - DIAS_RECEM_INICIADOS);
+
+      const { data, error } = await supabase
+        .from('irmaos')
+        .select('id, nome, email, situacao, data_iniciacao')
+        .gte('data_iniciacao', fmt(desde))
+        .lte('data_iniciacao', fmt(hoje))
+        .order('data_iniciacao', { ascending: false });
+      if (error) throw error;
+      const lista = (data || []).filter(i => !String(i.situacao || '').toLowerCase().includes('falec'));
+
+      // Quem já recebeu as boas-vindas (se a tabela ainda não existir, segue normalmente)
+      const enviados = {};
+      if (lista.length > 0) {
+        const { data: env, error: eEnv } = await supabase
+          .from('boas_vindas_enviada')
+          .select('irmao_id, enviado_em')
+          .in('irmao_id', lista.map(i => String(i.id)));
+        if (!eEnv) (env || []).forEach(e => {
+          if (!enviados[e.irmao_id] || e.enviado_em > enviados[e.irmao_id]) enviados[e.irmao_id] = e.enviado_em;
+        });
+      }
+
+      setRecemIniciados(lista.map(i => ({ ...i, enviadoEm: enviados[String(i.id)] || null })));
+      setIrmaosSelec(lista.filter(i => i.email && !enviados[String(i.id)]).map(i => i.id));
+    } catch (e) {
+      console.error('Erro ao buscar recém-iniciados:', e);
+      showError('Erro ao buscar os irmãos iniciados recentemente.');
+      setRecemIniciados([]);
+      setIrmaosSelec([]);
+    } finally {
+      setLoadingRecem(false);
+    }
+  };
 
   const carregarIrmaos = async () => {
     const { data } = await supabase
@@ -196,9 +251,29 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
       showError('Selecione ao menos um irmão.'); return;
     }
 
+    if (tipoSelec === 'boas_vindas') {
+      if (irmaosSelec.length === 0) { showError('Selecione ao menos um irmão.'); return; }
+      const sel = recemIniciados.filter(i => irmaosSelec.includes(i.id));
+      const lista = sel.map(i => '• ' + i.nome + (i.enviadoEm ? ' (já recebeu em ' + new Date(i.enviadoEm).toLocaleDateString('pt-BR') + ')' : '')).join('\n');
+      if (!window.confirm('Enviar boas-vindas para:\n' + lista + '\n\nVenerável, Secretário e Administrador receberão o informativo do envio.')) return;
+    }
+
     setEnviando(true);
     setResultados([]);
     try {
+      if (tipoSelec === 'boas_vindas') {
+        const { data: jsonW, error: fnErrorW } = await supabase.functions.invoke('enviar-boas-vindas', {
+          body: { irmaos_ids: irmaosSelec },
+        });
+        if (fnErrorW) throw fnErrorW;
+        if (!jsonW?.ok) throw new Error(jsonW?.erro || 'Erro desconhecido');
+        setResultados(jsonW.resultados || []);
+        const enviadosW = (jsonW.resultados || []).filter(r => r.status === 'enviado').length;
+        showSuccess('Boas-vindas enviadas para ' + enviadosW + ' irmão(s)!');
+        carregarLogs();
+        carregarRecemIniciados();
+        return;
+      }
       if (tipoSelec === 'vencimento_licencas') {
         const { data: jsonV, error: fnErrorV } = await supabase.functions.invoke('avisar-vencimento-licencas', {
           body: { modo: 'manual' },
@@ -465,6 +540,15 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
               </div>
             )}
 
+            {/* Info para boas-vindas */}
+            {tipoSelec === 'boas_vindas' && (
+              <div style={{ ...sCard, background: 'var(--color-accent-bg)', borderColor: 'var(--color-accent)' }}>
+                <p style={{ color: 'var(--color-text)', margin: 0, fontSize: '0.875rem' }}>
+                  ℹ️ Envia a mensagem de boas-vindas, assinada pelo <strong>Venerável Mestre</strong> e pelos <strong>1º e 2º Vigilantes</strong>, com os nomes das Luzes e Dignidades da gestão atual, aos irmãos iniciados nos últimos <strong>{DIAS_RECEM_INICIADOS} dias</strong> (lista ao lado). O <strong>Venerável</strong>, o <strong>Secretário</strong> e o <strong>Administrador</strong> recebem o informativo do envio. As respostas vão para o Secretário.
+                </p>
+              </div>
+            )}
+
             {/* Botão enviar */}
             {podeEnviarEmail ? (
             <button onClick={enviarManual} disabled={enviando}
@@ -473,6 +557,8 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
                 ? '📤 Enviando...'
                 : tipoSelec === 'aniversariantes'
                   ? '📤 Enviar para Liderança'
+                  : tipoSelec === 'boas_vindas'
+                    ? `🤝 Enviar boas-vindas para ${irmaosSelec.length} irmão(s)`
                   : tipoSelec === 'vencimento_licencas'
                     ? '📤 Enviar aviso agora'
                   : tipoSelec === 'cronograma_mes'
@@ -494,7 +580,7 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.35rem 0.5rem', borderRadius: 'var(--radius-md)', background: r.status === 'enviado' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', fontSize: '0.8rem' }}>
                       <span style={{ color: 'var(--color-text)' }}>{r.nome}</span>
                       <span style={{ color: r.status === 'enviado' ? '#10b981' : '#ef4444', fontWeight: '600' }}>
-                        {r.status === 'enviado' ? '✓ Enviado' : r.status === 'pulado_sem_pendencia' ? '— Sem pendência' : '✗ Erro'}
+                        {r.status === 'enviado' ? '✓ Enviado' : r.status === 'pulado_sem_pendencia' ? '— Sem pendência' : r.status === 'sem_email' ? '— Sem e-mail' : '✗ Erro'}
                       </span>
                     </div>
                   ))}
@@ -504,6 +590,51 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
           </div>
 
           {/* Coluna direita: Seleção de irmãos */}
+          {tipoSelec === 'boas_vindas' ? (
+            <div style={sCard}>
+              <p style={{ fontWeight: '700', color: 'var(--color-text)', margin: '0 0 0.25rem', fontSize: '0.95rem' }}>
+                🤝 Iniciados nos últimos {DIAS_RECEM_INICIADOS} dias
+              </p>
+              <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+                {irmaosSelec.length} selecionado(s) para envio. Confira os nomes antes de enviar.
+              </p>
+              <div style={{ maxHeight: '420px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                {loadingRecem && (
+                  <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem', fontSize: '0.875rem' }}>Buscando...</p>
+                )}
+                {!loadingRecem && recemIniciados.length === 0 && (
+                  <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem', fontSize: '0.875rem' }}>
+                    Nenhum irmão com iniciação nos últimos {DIAS_RECEM_INICIADOS} dias.
+                  </p>
+                )}
+                {!loadingRecem && recemIniciados.map((irmao) => {
+                  const sel = irmaosSelec.includes(irmao.id);
+                  const podeSel = !!irmao.email;
+                  return (
+                    <div key={irmao.id}
+                      onClick={() => podeSel && toggleIrmao(irmao.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-lg)', background: sel ? 'var(--color-accent-bg)' : 'var(--color-surface-2)', border: '1px solid ' + (sel ? 'var(--color-accent)' : 'transparent'), cursor: podeSel ? 'pointer' : 'not-allowed', opacity: podeSel ? 1 : 0.7 }}>
+                      <input type="checkbox" checked={sel} readOnly disabled={!podeSel} style={{ accentColor: 'var(--color-accent)', flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontWeight: '600', fontSize: '0.875rem', color: sel ? 'var(--color-accent)' : 'var(--color-text)' }}>{irmao.nome}</p>
+                        <p style={{ margin: 0, fontSize: '0.72rem', color: 'var(--color-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          Iniciação: {fmtBR(irmao.data_iniciacao)} · {irmao.email || '⚠️ sem e-mail cadastrado'}
+                        </p>
+                        {irmao.enviadoEm && (
+                          <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: '600', color: '#f59e0b' }}>
+                            ✉️ Já recebeu em {new Date(irmao.enviadoEm).toLocaleDateString('pt-BR')}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p style={{ marginTop: '0.5rem', fontSize: '0.72rem', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+                {recemIniciados.length} irmão(s) encontrado(s)
+              </p>
+            </div>
+          ) : (
           <div style={sCard}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
               <p style={{ fontWeight: '700', color: 'var(--color-text)', margin: 0, fontSize: '0.95rem' }}>
@@ -546,6 +677,7 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
               {irmaos.length} irmão(s) com e-mail cadastrado
             </p>
           </div>
+          )}
         </div>
       )}
 
@@ -558,7 +690,7 @@ export default function EmailIrmaos({ showSuccess, showError, permissoes }) {
             </p>
           </div>
 
-          {TIPOS.filter(t => t.id !== 'vencimento_licencas').map(tipo => {
+          {TIPOS.filter(t => !['vencimento_licencas', 'boas_vindas'].includes(t.id)).map(tipo => {
             const cfg = configs.find(c => c.tipo === tipo.id);
             const ativo = cfg?.ativo || false;
             return (
