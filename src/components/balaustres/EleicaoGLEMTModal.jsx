@@ -55,6 +55,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
   const travada = !!el.encerrada;
   const [avisoTrava, setAvisoTrava] = useState(false);
   const editavel = podeEditar && !travada;
+  const podeGerarDocs = !!podeEditar; // gerar documentos (ata, edital, lista, PDFs) só para quem edita balaustres
 
   const setEl = (campos) => {
     if (travada) { setAvisoTrava(true); return; }   // nada de alterar dados após o encerramento
@@ -217,6 +218,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
   };
 
   const gerarAtaComModelo = async (modeloId) => {
+    if (!podeGerarDocs) { showError('Você não tem permissão para gerar documentos.'); return; }
     setEscolhaModelo(null);
     setGerando('ata');
     try {
@@ -250,6 +252,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
   // ── PDFs (gerados na hora do clique) ──
   const periodoTxt = el.ano_inicio && el.ano_fim ? `${el.ano_inicio}/${el.ano_fim}` : '';
   const pdf = (tipo) => {
+    if (!podeGerarDocs) { showError('Você não tem permissão para gerar documentos.'); return; }
     const lista = tipo === 'inaptos' ? inaptos : aptos;
     if (tipo !== 'ambos' && !lista.length) { showError(tipo === 'inaptos' ? 'Nenhum irmão inapto.' : 'Nenhum irmão apto.'); return; }
     gerarAptosVotarPDF({
@@ -260,6 +263,7 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
   };
   // ── Word (edital, lista, ata) — usa os dados da tela (salva em seguida, se houver alteração) ──
   const word = async (qual) => {
+    if (!podeGerarDocs) { showError('Você não tem permissão para gerar documentos.'); return; }
     setGerando(qual);
     try {
       if ((qual === 'edital' || qual === 'edital_aptos') && !edital) { showError('Emita o edital (número) na aba Configuração antes de gerar o documento.'); return; }
@@ -526,10 +530,10 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
               </div>
               <div style={{ ...card, display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
                 <strong style={{ fontSize: '0.8rem', color: 'var(--color-text)', marginRight: '0.25rem' }}>Relatórios:</strong>
-                <button type="button" disabled={apt.carregando} onClick={() => pdf('aptos')} style={btn('#10b981', 'rgba(16,185,129,0.1)')}>📄 PDF Aptos</button>
-                <button type="button" disabled={apt.carregando} onClick={() => pdf('inaptos')} style={btn('#ef4444', 'rgba(239,68,68,0.1)')}>📄 PDF Inaptos</button>
-                <button type="button" disabled={apt.carregando} onClick={() => pdf('ambos')} style={btn(ROXO, 'rgba(139,92,246,0.1)')}>📄 PDF Aptos e Inaptos</button>
-                <button type="button" disabled={!!gerando} onClick={() => word('lista')} style={btn('var(--color-text)')}>{gerando === 'lista' ? '⏳' : '📋'} Lista de Presença (Word)</button>
+                <button type="button" disabled={apt.carregando || !podeGerarDocs} onClick={() => pdf('aptos')} style={btn('#10b981', 'rgba(16,185,129,0.1)')}>📄 PDF Aptos</button>
+                <button type="button" disabled={apt.carregando || !podeGerarDocs} onClick={() => pdf('inaptos')} style={btn('#ef4444', 'rgba(239,68,68,0.1)')}>📄 PDF Inaptos</button>
+                <button type="button" disabled={apt.carregando || !podeGerarDocs} onClick={() => pdf('ambos')} style={btn(ROXO, 'rgba(139,92,246,0.1)')}>📄 PDF Aptos e Inaptos</button>
+                <button type="button" disabled={!!gerando || !podeGerarDocs} onClick={() => word('lista')} style={btn('var(--color-text)')}>{gerando === 'lista' ? '⏳' : '📋'} Lista de Presença (Word)</button>
               </div>
               {/* Voto em trânsito: Irmãos de outras Lojas (raro) — contados à parte dos votantes da Loja */}
               <div style={{ ...card, borderLeft: '4px solid #f59e0b' }}>
@@ -709,14 +713,14 @@ export default function EleicaoGLEMTModal({ balaustre, podeEditar, onClose, onSa
                 ['lista', '📋 Lista de Presença', 'Word — presentes marcados (ou todos os aptos)', false],
                 ['ata', '📜 Ata da Eleição', pendente ? 'Bloqueada: sessão pendente' : 'Word — modelo "Ata Eleição GLEMT"', pendente],
               ].map(([k, t, d, bloq]) => (
-                <button key={k} type="button" disabled={!!gerando || bloq} onClick={() => word(k)}
+                <button key={k} type="button" disabled={!!gerando || bloq || !podeGerarDocs} onClick={() => word(k)}
                   style={{ ...card, textAlign: 'left', cursor: bloq ? 'not-allowed' : 'pointer', opacity: bloq ? 0.5 : 1 }}>
                   <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)' }}>{gerando === k ? '⏳ Gerando…' : t}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>{d}</div>
                 </button>
               ))}
               {[['aptos', '✅ PDF Aptos', 'Relação dos aptos a votar'], ['inaptos', '⛔ PDF Inaptos', 'Relação dos inaptos'], ['ambos', '🗳️ PDF Aptos e Inaptos', 'Os dois quadros no mesmo arquivo']].map(([k, t, d]) => (
-                <button key={k} type="button" disabled={apt.carregando} onClick={() => pdf(k)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
+                <button key={k} type="button" disabled={apt.carregando || !podeGerarDocs} onClick={() => pdf(k)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
                   <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-text)' }}>{t}</div>
                   <div style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>{d}</div>
                 </button>
