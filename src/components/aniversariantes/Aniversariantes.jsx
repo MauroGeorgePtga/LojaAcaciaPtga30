@@ -101,6 +101,7 @@ export default function Aniversariantes({ permissoes }) {
   const podeEnviarEmail = permissoes?.canEditFinancial || permissoes?.canManageUsers || false;
   // Relatórios em PDF: só quem tem alguma permissão de edição; acesso simples apenas visualiza
   const podeGerarRelatorio = !!(permissoes?.canEdit || permissoes?.canEditFinancial || permissoes?.canManageUsers);
+  const podeGerenciarEventos = podeGerarRelatorio; // gerenciar eventos/datas especiais: só quem tem permissão de edição
   const [aniversariantes, setAniversariantes] = useState([]);
   const [filtro, setFiltro] = useState('hoje');
   const [mesFiltro, setMesFiltro] = useState(new Date().getMonth() + 1);
@@ -1965,7 +1966,8 @@ export default function Aniversariantes({ permissoes }) {
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button onClick={() => setModalEventos(true)} style={{
+            {podeGerenciarEventos && (
+<button onClick={() => setModalEventos(true)} style={{
               display: 'flex', alignItems: 'center', gap: '0.4rem',
               padding: '0.55rem 1rem', borderRadius: 'var(--radius-md)',
               background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.35)',
@@ -1973,6 +1975,7 @@ export default function Aniversariantes({ permissoes }) {
             }}>
               ⚙️ Gerenciar Eventos
             </button>
+)}
             {podeGerarRelatorio && (
 <button onClick={gerarRelatorioPDF} disabled={loading} style={{
               display: 'flex', alignItems: 'center', gap: '0.4rem',
@@ -2073,7 +2076,7 @@ export default function Aniversariantes({ permissoes }) {
       )}
 
       {/* ── Modal Gerenciar Eventos ───────────────────────────── */}
-      {modalEventos && (
+      {modalEventos && podeGerenciarEventos && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 1000,
           background: 'rgba(0,0,0,0.7)',
