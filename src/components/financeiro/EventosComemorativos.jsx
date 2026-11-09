@@ -6,8 +6,9 @@
  * com rateio entre participantes.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
+import { calcularRateio, custeioAtivo, descricaoComCusteio } from './utils/rateioCusteio';
 
 // ─────────────────────────────────────────────
 //  Helpers
@@ -74,7 +75,7 @@ const btnEdit = {
 // ─────────────────────────────────────────────
 const EVENTO_VAZIO = {
   nome: '', ano: new Date().getFullYear(), data_evento: '',
-  descricao: '', idade_gratuita: 5, idade_meia: 11, valor_ajustado: '', contribuicao_loja: '',
+  descricao: '', idade_gratuita: 5, idade_meia: 11, valor_ajustado: '', contribuicao_loja: '', custeio_percentual_irmao: '',
 };
 
 const ModalEvento = ({ aberto, onFechar, onSalvar, eventoEdit }) => {
@@ -93,6 +94,7 @@ const ModalEvento = ({ aberto, onFechar, onSalvar, eventoEdit }) => {
         idade_meia: eventoEdit.idade_meia ?? 11,
         valor_ajustado: eventoEdit.valor_ajustado || '',
         contribuicao_loja: eventoEdit.contribuicao_loja || '',
+        custeio_percentual_irmao: eventoEdit.custeio_percentual_irmao || '',
       } : EVENTO_VAZIO);
       setErro('');
     }
@@ -103,6 +105,8 @@ const ModalEvento = ({ aberto, onFechar, onSalvar, eventoEdit }) => {
   const handleSalvar = async () => {
     if (!form.nome.trim()) { setErro('Informe o nome do evento.'); return; }
     if (!form.ano) { setErro('Informe o ano.'); return; }
+    const cp = (form.custeio_percentual_irmao === '' || form.custeio_percentual_irmao == null) ? null : parseFloat(form.custeio_percentual_irmao);
+    if (cp !== null && (isNaN(cp) || cp <= 0 || cp >= 100)) { setErro('O % do custeio deve ficar entre 0,01 e 99,99 (ou em branco para ratear normalmente).'); return; }
     setSalvando(true); setErro('');
     try { await onSalvar(form); }
     catch (e) { setErro(e.message); }
@@ -175,6 +179,13 @@ const ModalEvento = ({ aberto, onFechar, onSalvar, eventoEdit }) => {
             <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>Deixe em branco para usar o valor calculado pelas despesas</p>
           </div>
 
+          {/* Custeio */}
+          <div>
+            <label style={lbl}>Custeio — % que cada irmão paga da própria família</label>
+            <input style={inp} type="number" step="0.01" min="0" max="99.99" value={form.custeio_percentual_irmao} onChange={e => f('custeio_percentual_irmao', e.target.value)} placeholder="Ex.: 50 — em branco = sem custeio" />
+            <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>O restante é pago pelos custeadores (marcados nos participantes), divididos igualmente. Visitantes seguem como hoje (Loja).</p>
+          </div>
+
           {erro && <div style={{ padding: '0.6rem 0.85rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: '#ef4444' }}>{erro}</div>}
 
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border)' }}>
@@ -199,9 +210,12 @@ const PART_VAZIO = {
   adultos_convidados: 0,
   criancas_meia: 0,
   criancas_gratuitas: 0,
+  custeador: false,
+  percentual_proprio: '',
+  isento: false,
 };
 
-const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, evento }) => {
+const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, evento, valorCota = 0 }) => {
   const [form, setForm] = useState(PART_VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -215,6 +229,9 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
         adultos_convidados: partEdit.adultos_convidados || 0,
         criancas_meia: partEdit.criancas_meia || 0,
         criancas_gratuitas: partEdit.criancas_gratuitas || 0,
+        custeador: !!partEdit.custeador,
+        percentual_proprio: partEdit.percentual_proprio || '',
+        isento: !!partEdit.isento,
       } : PART_VAZIO);
       setErro('');
     }
@@ -226,9 +243,22 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
   const cotaCalc = 1 + (parseInt(form.adultos_convidados) || 0) + ((parseInt(form.criancas_meia) || 0) * 0.5);
   const valorEstimado = evento?.valor_ajustado ? cotaCalc * parseFloat(evento.valor_ajustado) : null;
 
+  // Custeio: simulação da divisão para este participante
+  const custeioOn = custeioAtivo(evento) && form.tipo === 'irmao';
+  const simulacao = (custeioOn && valorCota > 0)
+    ? calcularRateio(
+        [
+          { id: 'sim', irmao_id: 1, cotas: cotaCalc, custeador: form.custeador, percentual_proprio: form.percentual_proprio, isento: form.isento },
+          ...(form.custeador ? [] : [{ id: 'dummy', irmao_id: 2, cotas: 0, custeador: true }]),
+        ],
+        valorCota, evento
+      ).porParticipante.sim
+    : null;
+
   const handleSalvar = async () => {
     if (form.tipo === 'irmao' && !form.irmao_id) { setErro('Selecione um irmão.'); return; }
     if (form.tipo === 'externo' && !form.nome_externo.trim()) { setErro('Informe o nome do convidado externo.'); return; }
+    if (form.percentual_proprio !== '' && (isNaN(parseFloat(form.percentual_proprio)) || parseFloat(form.percentual_proprio) < 0 || parseFloat(form.percentual_proprio) > 100)) { setErro('O % a pagar deve ficar entre 0 e 100.'); return; }
     setSalvando(true); setErro('');
     try { await onSalvar({ ...form, cotas: cotaCalc }); }
     catch (e) { setErro(e.message); }
@@ -306,6 +336,40 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
             </div>
           </div>
 
+          {/* Custeio */}
+          {custeioOn && (
+            <div style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
+                🤝 Custeio <span style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--color-text-muted)' }}>(irmão paga {evento.custeio_percentual_irmao}% por padrão)</span>
+              </p>
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--color-text)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={!!form.custeador} onChange={e => f('custeador', e.target.checked)} style={{ marginTop: '0.2rem' }} />
+                <span><strong>Custeador</strong> — paga 100% da própria família e convidados e divide igualmente com os demais custeadores o custeio das famílias dos irmãos</span>
+              </label>
+              {!form.custeador && (
+                <>
+                  <div>
+                    <label style={lbl}>% a pagar (opcional)</label>
+                    <input style={{ ...inp, opacity: form.isento ? 0.5 : 1 }} type="number" step="0.01" min="0" max="100" disabled={!!form.isento}
+                      value={form.percentual_proprio} onChange={e => f('percentual_proprio', e.target.value)} placeholder={`Vazio ou 0 = ${evento.custeio_percentual_irmao}% do evento`} />
+                    <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', margin: '0.2rem 0 0' }}>Acima de 0, prevalece sobre o % do evento. Os custeadores mantêm a fatia do evento; a diferença fica com a Loja.</p>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--color-text)', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!form.isento} onChange={e => f('isento', e.target.checked)} />
+                    <span><strong>Isento</strong> — o irmão não paga; custeadores e Loja cobrem</span>
+                  </label>
+                </>
+              )}
+              {simulacao && (
+                <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.6 }}>
+                  {form.custeador
+                    ? <>Paga a própria família: <strong style={{ color: '#10b981' }}>{fmtR(simulacao.custo)}</strong> + a sua parte do custeio das famílias (calculada com todos os participantes).</>
+                    : <>Irmão paga <strong style={{ color: '#10b981' }}>{fmtR(simulacao.pagaProprio)}</strong> · Custeadores <strong style={{ color: '#8b5cf6' }}>{fmtR(simulacao.parteCusteio)}</strong> · Loja <strong style={{ color: '#6366f1' }}>{fmtR(simulacao.parteLoja)}</strong></>}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Preview de cotas */}
           <div style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 'var(--radius-md)', padding: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
             <div>
@@ -337,7 +401,11 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
 // ─────────────────────────────────────────────
 //  Tabela de Participantes separada por grupo
 // ─────────────────────────────────────────────
-const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit, setModalPart, setConfirmExcluirPart, totalCotas, btnEdit, btnDanger, podeEditar = false }) => {
+const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit, setModalPart, setConfirmExcluirPart, totalCotas, btnEdit, btnDanger, podeEditar = false, rateio = null }) => {
+  const comCusteio = !!rateio?.ativo;
+  const nCols = comCusteio ? 9 : 7;
+  const itemDe = (p) => rateio?.porParticipante?.[p.id];
+  const aPagar = (p) => (itemDe(p) ? itemDe(p).total : parseFloat(p.cotas) * valorCota);
   const nomeParticipante = (p) => (p.irmao_id ? (p.irmaos?.nome || '') : (p.nome_externo || ''));
   const porNome = (a, b) => nomeParticipante(a).localeCompare(nomeParticipante(b), 'pt-BR', { sensitivity: 'base' });
 
@@ -360,6 +428,8 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
         <th style={thS(true)}>C.Meia</th>
         <th style={thS(true)}>C.Grat.</th>
         <th style={thS(true)}>Cotas</th>
+        {comCusteio && <th style={thS(true)}>Custo</th>}
+        {comCusteio && <th style={thS(true)}>% Próprio</th>}
         <th style={thS(true)}>Valor a Pagar</th>
         <th style={thS(true)}></th>
       </tr>
@@ -370,13 +440,29 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     <tr style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
       <td style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)' }}>
         {p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?')}
+        {comCusteio && p.irmao_id && p.custeador && (
+          <span title={`Própria ${fmtR(itemDe(p)?.custo)} + custeio famílias ${fmtR(itemDe(p)?.recebeCusteio)}`}
+            style={{ marginLeft: '0.4rem', fontSize: '0.62rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.35)' }}>
+            CUSTEADOR +{fmtR(itemDe(p)?.recebeCusteio)}
+          </span>
+        )}
       </td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>1+{p.adultos_convidados}</td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{p.criancas_meia}</td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{p.criancas_gratuitas}</td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#3b82f6' }}>{parseFloat(p.cotas).toFixed(1)}</td>
+      {comCusteio && (
+        <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+          {valorCota > 0 ? fmtR(parseFloat(p.cotas) * valorCota) : '—'}
+        </td>
+      )}
+      {comCusteio && (
+        <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
+          {!p.irmao_id ? '—' : itemDe(p)?.custeador ? '100%' : itemDe(p)?.isento ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>Isento</span> : itemDe(p)?.personalizado ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{itemDe(p).pctProprio}%</span> : `${itemDe(p)?.pctProprio ?? 100}%`}
+        </td>
+      )}
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#10b981' }}>
-        {valorCota > 0 ? fmtR(parseFloat(p.cotas) * valorCota) : '—'}
+        {valorCota > 0 ? fmtR(aPagar(p)) : '—'}
       </td>
       {!encerrado ? (
         <td style={{ padding: '0.55rem 0.5rem', textAlign: 'right' }}>
@@ -391,12 +477,15 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
 
   const SubtotalRow = ({ lista, cor, label }) => {
     const cotas = lista.reduce((s, p) => s + parseFloat(p.cotas), 0);
-    const valor = lista.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0);
+    const valor = lista.reduce((s, p) => s + aPagar(p), 0);
+    const custoLista = lista.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0);
     return (
       <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
         <td style={{ padding: '0.45rem 0.65rem', fontWeight: 700, color: cor, fontSize: '0.78rem' }}>Subtotal {label}</td>
         <td colSpan={3} />
         <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#3b82f6', fontSize: '0.85rem' }}>{cotas.toFixed(1)}</td>
+        {comCusteio && <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{valorCota > 0 ? fmtR(custoLista) : '—'}</td>}
+        {comCusteio && <td />}
         <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#10b981', fontSize: '0.85rem' }}>{valorCota > 0 ? fmtR(valor) : '—'}</td>
         <td />
       </tr>
@@ -412,7 +501,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
           <>
             <thead>
               <tr style={{ background: 'rgba(201,168,76,0.12)' }}>
-                <th colSpan={7} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#c9a84c', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th colSpan={nCols} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#c9a84c', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   👤 Irmãos da Loja ({irmaos_part.length})
                 </th>
               </tr>
@@ -430,7 +519,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
           <>
             <thead>
               <tr style={{ background: 'rgba(99,102,241,0.12)', borderTop: irmaos_part.length > 0 ? '2px solid var(--color-border)' : 'none' }}>
-                <th colSpan={7} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                <th colSpan={nCols} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                   🌍 Convidados Externos ({externos_part.length})
                 </th>
               </tr>
@@ -448,8 +537,10 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
           <tr style={{ background: 'var(--color-surface-2)', borderTop: '2px solid var(--color-border)' }}>
             <td colSpan={4} style={{ padding: '0.55rem 0.65rem', fontWeight: 700, color: 'var(--color-text)' }}>TOTAL GERAL</td>
             <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#3b82f6' }}>{totalCotas.toFixed(1)}</td>
+            {comCusteio && <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)' }}>{valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0)) : '—'}</td>}
+            {comCusteio && <td />}
             <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#10b981' }}>
-              {valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0)) : '—'}
+              {valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + aPagar(p), 0)) : '—'}
             </td>
             <td />
           </tr>
@@ -486,6 +577,10 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
   const [cotasJaLancadas, setCotasJaLancadas] = useState({});
   const [lancandoCotas, setLancandoCotas] = useState(false);
   const [statusCotas, setStatusCotas] = useState({ total: 0, lancados: 0 });
+  const [lancCotas, setLancCotas] = useState([]);      // lançamentos de cotas já criados para o evento
+  const [modalRecalc, setModalRecalc] = useState(false);
+  const [recalcSel, setRecalcSel] = useState({});
+  const [recalculando, setRecalculando] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarregando(true);
@@ -503,12 +598,13 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
     // Calcular status das cotas — quantos participantes irmãos já têm lançamento
     const { data: cotasExist } = await supabase
       .from('lancamentos_loja')
-      .select('origem_irmao_id')
+      .select('id,origem_irmao_id,valor,status,descricao,tipo')
       .eq('evento_comemorativo_id', evento.id)
       .eq('origem_tipo', 'Irmao');
+    setLancCotas(cotasExist || []);
     const idsComLanc = new Set((cotasExist || []).map(l => l.origem_irmao_id).filter(Boolean));
-    const totalParticIrmaos = partsArr.filter(p => p.irmao_id).length;
-    const lancados = partsArr.filter(p => p.irmao_id && idsComLanc.has(p.irmao_id)).length;
+    const totalParticIrmaos = partsArr.filter(p => p.irmao_id && !p.isento).length;
+    const lancados = partsArr.filter(p => p.irmao_id && !p.isento && idsComLanc.has(p.irmao_id)).length;
     setStatusCotas({ total: totalParticIrmaos, lancados });
 
     setCarregando(false);
@@ -524,6 +620,26 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
   const totalCotas       = participantes.reduce((s, p) => s + parseFloat(p.cotas || 0), 0);
   const valorCalc        = totalCotas > 0 ? baseRateio / totalCotas : 0;
   const valorCota        = evento.valor_ajustado ? parseFloat(evento.valor_ajustado) : valorCalc;
+
+  // Rateio com custeio (custeadores, % próprio, isentos, parte da Loja)
+  const rateio = useMemo(() => calcularRateio(participantes, valorCota, evento), [participantes, valorCota, evento]);
+
+  // Lançamentos já criados que diferem do cálculo atual
+  const divergencias = useMemo(() => {
+    if (valorCota <= 0) return [];
+    const porIrmao = {};
+    lancCotas.forEach(l => { (porIrmao[l.origem_irmao_id] = porIrmao[l.origem_irmao_id] || []).push(l); });
+    const lista = [];
+    participantes.filter(p => p.irmao_id && porIrmao[p.irmao_id]).forEach(p => {
+      const esperado = rateio.porParticipante[p.id]?.total ?? 0;
+      const lancs = porIrmao[p.irmao_id];
+      const atual = lancs.reduce((s, l) => s + parseFloat(l.valor || 0), 0);
+      if (Math.abs(atual - esperado) >= 0.01) {
+        lista.push({ p, lancs, atual, esperado, editavel: lancs.length === 1 && lancs[0].status === 'pendente' && esperado > 0 });
+      }
+    });
+    return lista;
+  }, [lancCotas, participantes, rateio, valorCota]);
 
   // ── Abrir modal de cotas ──
   const abrirModalCotas = async () => {
@@ -547,7 +663,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
     // Pré-selecionar irmãos que ainda não têm lançamento
     const preSelected = {};
     participantes
-      .filter(p => p.irmao_id && !jaLancados[p.irmao_id])
+      .filter(p => p.irmao_id && !p.isento && !jaLancados[p.irmao_id])
       .forEach(p => { preSelected[p.irmao_id] = true; });
     setCotasSelecionadas(preSelected);
 
@@ -567,7 +683,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       return;
     }
     const selecionados = participantes.filter(p =>
-      p.irmao_id && cotasSelecionadas[p.irmao_id]
+      p.irmao_id && !p.isento && cotasSelecionadas[p.irmao_id]
     );
     if (selecionados.length === 0) {
       showError('Selecione pelo menos um irmão.');
@@ -576,12 +692,12 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
     setLancandoCotas(true);
     try {
       const inserts = selecionados.map(p => {
-        const cotas = parseFloat(p.cotas || 1);
-        const valor = (valorCota * cotas).toFixed(2);
+        const item = rateio.porParticipante[p.id];
+        const valor = (item ? item.total : valorCota * parseFloat(p.cotas || 1)).toFixed(2);
         return {
           tipo: 'receita',
           categoria_id: cotasForm.categoria_id,
-          descricao: cotasForm.descricao,
+          descricao: descricaoComCusteio(cotasForm.descricao, item),
           valor: parseFloat(valor),
           data_lancamento: cotasForm.data_lancamento,
           data_vencimento: cotasForm.data_vencimento,
@@ -604,6 +720,46 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
     }
   };
 
+  // ── Recalcular lançamentos já criados ──
+  const abrirModalRecalc = async () => {
+    const { data } = await supabase
+      .from('lancamentos_loja')
+      .select('id,origem_irmao_id,valor,status,descricao,tipo')
+      .eq('evento_comemorativo_id', evento.id)
+      .eq('origem_tipo', 'Irmao');
+    setLancCotas(data || []);
+    setRecalcSel({});
+    setModalRecalc(true);
+  };
+
+  const aplicarRecalculo = async () => {
+    const alvos = divergencias.filter(d => d.editavel && recalcSel[d.p.id] !== false);
+    if (alvos.length === 0) { showError('Nenhum lançamento selecionado para atualizar.'); return; }
+    setRecalculando(true);
+    try {
+      let atualizados = 0;
+      for (const d of alvos) {
+        const item = rateio.porParticipante[d.p.id];
+        const l = d.lancs[0];
+        const { data, error } = await supabase
+          .from('lancamentos_loja')
+          .update({ valor: parseFloat(item.total.toFixed(2)), descricao: descricaoComCusteio(l.descricao, item) })
+          .eq('id', l.id)
+          .select();
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error('Sem permissão para atualizar o lançamento.');
+        atualizados++;
+      }
+      showSuccess(`✅ ${atualizados} lançamento(s) atualizado(s)!`);
+      setModalRecalc(false);
+      await carregar();
+    } catch (e) {
+      showError('Erro ao recalcular: ' + e.message);
+    } finally {
+      setRecalculando(false);
+    }
+  };
+
   // ── Salvar participante ──
   const handleSalvarPart = async (form) => {
     const cotas = parseFloat(form.cotas);
@@ -616,6 +772,9 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       criancas_gratuitas: parseInt(form.criancas_gratuitas) || 0,
       cotas,
       valor_final: evento.valor_ajustado ? cotas * parseFloat(evento.valor_ajustado) : null,
+      custeador: form.tipo === 'irmao' ? !!form.custeador : false,
+      percentual_proprio: (form.tipo === 'irmao' && !form.custeador && !form.isento && parseFloat(form.percentual_proprio) > 0) ? parseFloat(form.percentual_proprio) : null,
+      isento: (form.tipo === 'irmao' && !form.custeador) ? !!form.isento : false,
     };
     if (partEdit) {
       const { error } = await supabase.from('evento_rateio_participantes').update(payload).eq('id', partEdit.id);
@@ -656,7 +815,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
   const recalcularParticipantes = async () => {
     if (valorCota <= 0) { showError('Defina o valor ajustado por cota antes de salvar.'); return; }
     for (const p of participantes) {
-      await supabase.from('evento_rateio_participantes').update({ valor_final: parseFloat(p.cotas) * valorCota }).eq('id', p.id);
+      await supabase.from('evento_rateio_participantes').update({ valor_final: rateio.porParticipante[p.id]?.total ?? parseFloat(p.cotas) * valorCota }).eq('id', p.id);
     }
     showSuccess('✅ Valores persistidos no banco!');
     carregar();
@@ -773,16 +932,22 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
         doc.text(`Irmaos (${irmaos_part.length})`, 14, y); y += 5;
         autoTable(doc, {
           startY: y,
-          head: [['Irmao', 'Cotas', 'Valor a Pagar']],
-          body: irmaos_part.map(p => [
-            abrev(p.irmaos?.nome),
-            parseFloat(p.cotas).toFixed(1),
-            valorCota > 0 ? fmtM(parseFloat(p.cotas) * valorCota) : '-',
-          ]),
+          head: [rateio.ativo ? ['Irmao', 'Cotas', 'Valor a Pagar', 'Obs.'] : ['Irmao', 'Cotas', 'Valor a Pagar']],
+          body: irmaos_part.map(p => {
+            const it = rateio.porParticipante[p.id];
+            const linha = [
+              abrev(p.irmaos?.nome),
+              parseFloat(p.cotas).toFixed(1),
+              valorCota > 0 ? fmtM(it ? it.total : parseFloat(p.cotas) * valorCota) : '-',
+            ];
+            if (rateio.ativo) linha.push(it?.custeador ? `Custeador (inclui custeio ${fmtM(it.recebeCusteio)})` : it?.isento ? 'Isento' : it?.personalizado ? `${it.pctProprio}% proprio` : '');
+            return linha;
+          }),
           foot: [[
             'Subtotal Irmaos',
             irmaos_part.reduce((s2, p) => s2 + parseFloat(p.cotas), 0).toFixed(1),
-            valorCota > 0 ? fmtM(irmaos_part.reduce((s2, p) => s2 + parseFloat(p.cotas) * valorCota, 0)) : '-',
+            valorCota > 0 ? fmtM(irmaos_part.reduce((s2, p) => s2 + (rateio.porParticipante[p.id]?.total ?? parseFloat(p.cotas) * valorCota), 0)) : '-',
+            ...(rateio.ativo ? [''] : []),
           ]],
           showFoot: 'lastPage',
           styles: { fontSize: 8, cellPadding: 2 },
@@ -828,6 +993,16 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       const totalRateio = valorCota > 0 ? participantes.reduce((s2, p) => s2 + parseFloat(p.cotas) * valorCota, 0) : 0;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(40, 40, 40);
       doc.text(`Total do Rateio: ${fmtM(totalRateio)}`, pW - 14, y, { align: 'right' });
+      if (rateio.ativo && valorCota > 0) {
+        if (y > 255) { doc.addPage(); y = 20; }
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+        const linhas = [
+          `Custeio: irmaos pagam ${rateio.pEvento}% (padrao); custeadores ${rateio.fatiaCusteio}%, divididos igualmente`,
+          `Cobrado dos irmaos: ${fmtM(rateio.resumo.cobradoIrmaos)}  |  Custeio das familias (custeadores): ${fmtM(rateio.resumo.custeioPool)}`,
+          `Parte da Loja: ${fmtM(rateio.resumo.lojaTotal)} (diferenca nas familias ${fmtM(rateio.resumo.lojaIrmaos)} + visitantes/externos ${fmtM(rateio.resumo.externos)})`,
+        ];
+        linhas.forEach((t) => { y += 5; doc.text(t, pW - 14, y, { align: 'right' }); });
+      }
     }
 
     // Rodapé em todas as páginas
@@ -889,6 +1064,18 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                   }}>
                   {todosLancados ? '🔒 Cotas Enviadas' : parcialLancado ? '💰 Lançar Restantes' : '💰 Lançar Cotas'}
                 </button>
+                {/* Recalcular lançamentos já criados */}
+                {statusCotas.lancados > 0 && (
+                  <button onClick={abrirModalRecalc}
+                    style={{...btnPrimary,
+                      background: divergencias.length > 0 ? 'rgba(245,158,11,0.15)' : 'rgba(139,92,246,0.12)',
+                      border: `1px solid ${divergencias.length > 0 ? 'rgba(245,158,11,0.4)' : 'rgba(139,92,246,0.35)'}`,
+                      color: divergencias.length > 0 ? '#f59e0b' : '#8b5cf6',
+                      fontSize: '0.72rem', padding: '0.35rem 0.65rem'}}
+                    title="Conferir e atualizar os lançamentos pelo cálculo atual">
+                    🔄 Recalcular lançamentos{divergencias.length > 0 ? ` (${divergencias.length})` : ''}
+                  </button>
+                )}
                 {/* Botão liberar — só aparece quando já lançado */}
                 {statusCotas.lancados > 0 && (
                   <button
@@ -926,6 +1113,10 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
               { label: 'Total Cotas', val: totalCotas.toFixed(1), cor: '#3b82f6', bg: 'rgba(59,130,246,0.1)' },
               { label: 'Valor/Cota Calculado', val: fmtR(valorCalc), cor: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
               { label: 'Valor/Cota Ajustado', val: evento.valor_ajustado ? fmtR(parseFloat(evento.valor_ajustado)) : '—', cor: '#10b981', bg: 'rgba(16,185,129,0.1)' },
+              ...(rateio.ativo ? [
+                { label: 'Custeadores (famílias)', val: fmtR(rateio.resumo.custeioPool), cor: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+                { label: 'Parte da Loja', val: fmtR(rateio.resumo.lojaTotal), cor: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+              ] : []),
             ].map(({ label, val, cor, bg }) => (
               <div key={label} style={{ background: 'var(--color-surface)', border: `1px solid ${cor}33`, borderRadius: 'var(--radius-md)', padding: '0.75rem' }}>
                 <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{label}</div>
@@ -933,6 +1124,17 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
               </div>
             ))}
           </div>
+
+          {rateio.ativo && valorCota > 0 && (
+            <div style={{ ...card, borderLeft: '4px solid #8b5cf6', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
+              <p style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.9rem', margin: '0 0 0.25rem' }}>🤝 Conferência do custeio ({rateio.pEvento}% irmão · {rateio.fatiaCusteio}% custeadores)</p>
+              Cobrado dos irmãos <strong style={{ color: '#10b981' }}>{fmtR(rateio.resumo.cobradoIrmaos)}</strong>
+              {' + '}Loja (diferença nas famílias) <strong style={{ color: '#6366f1' }}>{fmtR(rateio.resumo.lojaIrmaos)}</strong>
+              {' + '}Visitantes/externos (Loja) <strong style={{ color: '#6366f1' }}>{fmtR(rateio.resumo.externos)}</strong>
+              {' = '}<strong style={{ color: 'var(--color-text)' }}>{fmtR(rateio.resumo.totalRateio)}</strong>
+              {rateio.numCusteadores === 0 && <div style={{ color: '#f59e0b' }}>⚠️ Nenhum custeador marcado: a fatia dos custeadores está ficando com a Loja.</div>}
+            </div>
+          )}
 
           {/* Ajuste de valor */}
           <div style={{ ...card, borderLeft: '4px solid #c9a84c' }}>
@@ -1040,6 +1242,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                 btnEdit={btnEdit}
                 btnDanger={btnDanger}
                 podeEditar={podeEditar}
+                rateio={rateio}
               />
             )}
           </div>
@@ -1048,7 +1251,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
 
       {/* Modais */}
       <ModalParticipante aberto={modalPart} onFechar={() => { setModalPart(false); setPartEdit(null); }}
-        onSalvar={handleSalvarPart} partEdit={partEdit} irmaos={irmaos} evento={evento} />
+        onSalvar={handleSalvarPart} partEdit={partEdit} irmaos={irmaos} evento={evento} valorCota={valorCota} />
 
       <ModalEvento aberto={modalEvento} onFechar={() => setModalEvento(false)}
         onSalvar={async (form) => {
@@ -1057,6 +1260,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
             descricao: form.descricao || null, idade_gratuita: form.idade_gratuita,
             idade_meia: form.idade_meia, valor_ajustado: form.valor_ajustado ? parseFloat(form.valor_ajustado) : null,
             contribuicao_loja: form.contribuicao_loja ? parseFloat(form.contribuicao_loja) : null,
+            custeio_percentual_irmao: form.custeio_percentual_irmao ? parseFloat(form.custeio_percentual_irmao) : null,
           }).eq('id', evento.id);
           if (error) throw error;
           showSuccess('✅ Evento atualizado!');
@@ -1189,7 +1393,8 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
 
               {participantes.filter(p => p.irmao_id).map(p => {
                 const cotas = parseFloat(p.cotas || 1);
-                const valor = valorCota * cotas;
+                const item = rateio.porParticipante[p.id];
+                const valor = item ? item.total : valorCota * cotas;
                 const jaLancado = cotasJaLancadas[p.irmao_id];
                 const selecionado = !!cotasSelecionadas[p.irmao_id];
                 const nomeIrmao = p.irmaos?.nome || irmaos.find(i => i.id === p.irmao_id)?.nome || 'Irmão';
@@ -1197,16 +1402,20 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                   <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0', borderBottom:'1px solid var(--color-surface-2)', opacity: jaLancado ? 0.5 : 1 }}>
                     <input type="checkbox"
                       checked={selecionado}
-                      disabled={jaLancado}
+                      disabled={jaLancado || p.isento}
                       onChange={e => setCotasSelecionadas(prev => ({ ...prev, [p.irmao_id]: e.target.checked }))}
                       style={{ cursor: jaLancado ? 'not-allowed' : 'pointer' }}
                     />
                     <div style={{ flex:1 }}>
                       <span style={{ fontSize:'0.85rem', fontWeight:600, color:'var(--color-text)' }}>{nomeIrmao}</span>
                       {cotas !== 1 && <span style={{ fontSize:'0.72rem', color:'var(--color-text-muted)', marginLeft:'0.4rem' }}>({cotas} cotas)</span>}
+                      {item?.custeador && <span style={{ fontSize:'0.68rem', color:'#8b5cf6', fontWeight:700, marginLeft:'0.4rem' }}>custeador (+{fmtR(item.recebeCusteio)})</span>}
+                      {item && !item.custeador && rateio.ativo && p.irmao_id && <span style={{ fontSize:'0.68rem', color: (item.isento || item.personalizado) ? '#f59e0b' : 'var(--color-text-muted)', marginLeft:'0.4rem' }}>{item.isento ? 'isento' : `${item.pctProprio}%`}</span>}
                     </div>
                     {jaLancado ? (
                       <span style={{ fontSize:'0.72rem', color:'#10b981', fontWeight:600 }}>✅ Já lançado</span>
+                    ) : p.isento ? (
+                      <span style={{ fontSize:'0.72rem', color:'#f59e0b', fontWeight:600 }}>Isento — sem cobrança</span>
                     ) : (
                       <span style={{ fontSize:'0.85rem', fontWeight:700, color:'var(--color-accent)' }}>{fmtR(valor)}</span>
                     )}
@@ -1219,7 +1428,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
             <div style={{ padding:'1rem 1.4rem', borderTop:'1px solid var(--color-border)', background:'var(--color-surface-2)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div style={{ fontSize:'0.82rem', color:'var(--color-text-muted)' }}>
                 Total: <strong style={{ color:'var(--color-accent)', fontSize:'0.95rem' }}>
-                  {fmtR(participantes.filter(p => p.irmao_id && cotasSelecionadas[p.irmao_id]).reduce((s, p) => s + valorCota * parseFloat(p.cotas || 1), 0))}
+                  {fmtR(participantes.filter(p => p.irmao_id && !p.isento && cotasSelecionadas[p.irmao_id]).reduce((s, p) => s + (rateio.porParticipante[p.id]?.total ?? valorCota * parseFloat(p.cotas || 1)), 0))}
                 </strong>
                 {' · '}
                 {Object.values(cotasSelecionadas).filter(Boolean).length} irmão(s)
@@ -1233,6 +1442,55 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                   {lancandoCotas ? '⏳ Lançando...' : '💰 Lançar para Selecionados'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Modal Recalcular lançamentos ────────────────────── */}
+      {modalRecalc && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:1100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}>
+          <div style={{ background:'var(--color-surface)', borderRadius:'var(--radius-xl)', width:'100%', maxWidth:'720px', maxHeight:'90vh', display:'flex', flexDirection:'column', border:'1px solid var(--color-border)' }}>
+            <div style={{ padding:'1.1rem 1.4rem', borderBottom:'1px solid var(--color-border)', background:'var(--color-surface-2)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <h3 style={{ fontWeight:700, fontSize:'1rem', color:'var(--color-text)', margin:0 }}>🔄 Recalcular lançamentos — {evento.nome}</h3>
+                <p style={{ fontSize:'0.75rem', color:'var(--color-text-muted)', margin:'0.2rem 0 0' }}>
+                  Compara os lançamentos já criados com o cálculo atual (cotas, valor/cota, custeio e % de cada irmão).
+                </p>
+              </div>
+              <button onClick={() => setModalRecalc(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--color-text-muted)', fontSize:'1.5rem', lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ padding:'1rem 1.4rem', overflowY:'auto', flex:1 }}>
+              {divergencias.length === 0 ? (
+                <p style={{ textAlign:'center', color:'#10b981', fontWeight:600, padding:'1.5rem 0', margin:0 }}>✅ Todos os lançamentos estão de acordo com o cálculo atual.</p>
+              ) : divergencias.map(d => {
+                const nome = d.p.irmaos?.nome || irmaos.find(i => i.id === d.p.irmao_id)?.nome || 'Irmão';
+                const diff = d.esperado - d.atual;
+                const motivo = d.lancs.length > 1 ? 'Há mais de um lançamento para este irmão — ajuste manualmente.'
+                  : d.lancs[0].status !== 'pendente' ? `Lançamento já ${d.lancs[0].status} — diferença de ${fmtR(Math.abs(diff))} a ajustar manualmente.`
+                  : d.esperado <= 0 ? 'Irmão isento — exclua ou ajuste o lançamento manualmente.' : '';
+                return (
+                  <div key={d.p.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.6rem 0', borderBottom:'1px solid var(--color-surface-2)' }}>
+                    <input type="checkbox" disabled={!d.editavel} checked={d.editavel && recalcSel[d.p.id] !== false}
+                      onChange={e => setRecalcSel(prev => ({ ...prev, [d.p.id]: e.target.checked }))} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'0.85rem', fontWeight:600, color:'var(--color-text)' }}>{nome}</div>
+                      {motivo && <div style={{ fontSize:'0.7rem', color:'#f59e0b' }}>{motivo}</div>}
+                    </div>
+                    <div style={{ textAlign:'right', fontSize:'0.78rem', lineHeight:1.5 }}>
+                      <div style={{ color:'var(--color-text-muted)' }}>lançado {fmtR(d.atual)}</div>
+                      <div style={{ color:'var(--color-accent)', fontWeight:700 }}>correto {fmtR(d.esperado)}</div>
+                      <div style={{ color: diff > 0 ? '#ef4444' : '#3b82f6', fontWeight:700 }}>{diff > 0 ? '+' : '−'}{fmtR(Math.abs(diff))}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ padding:'1rem 1.4rem', borderTop:'1px solid var(--color-border)', background:'var(--color-surface-2)', display:'flex', justifyContent:'flex-end', gap:'0.5rem' }}>
+              <button onClick={() => setModalRecalc(false)} style={{ padding:'0.5rem 1rem', borderRadius:'var(--radius-md)', border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text-muted)', fontSize:'0.875rem', cursor:'pointer' }}>Fechar</button>
+              <button onClick={aplicarRecalculo} disabled={recalculando || divergencias.filter(d => d.editavel && recalcSel[d.p.id] !== false).length === 0}
+                style={{ padding:'0.5rem 1.25rem', borderRadius:'var(--radius-md)', border:'none', background:'var(--color-success)', color:'white', fontWeight:600, fontSize:'0.875rem', cursor: recalculando ? 'wait' : 'pointer', opacity: divergencias.filter(d => d.editavel && recalcSel[d.p.id] !== false).length === 0 ? 0.5 : 1 }}>
+                {recalculando ? '⏳ Atualizando...' : '🔄 Atualizar lançamentos pendentes'}
+              </button>
             </div>
           </div>
         </div>
@@ -1313,6 +1571,7 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
       idade_meia: form.idade_meia,
       valor_ajustado: form.valor_ajustado ? parseFloat(form.valor_ajustado) : null,
       contribuicao_loja: form.contribuicao_loja ? parseFloat(form.contribuicao_loja) : null,
+      custeio_percentual_irmao: form.custeio_percentual_irmao ? parseFloat(form.custeio_percentual_irmao) : null,
     }).select().single();
     if (error) throw error;
     showSuccess('🎉 Evento criado!');
