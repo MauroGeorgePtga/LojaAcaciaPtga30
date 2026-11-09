@@ -24,6 +24,8 @@ const Balaustres = ({
   const [modalGLEMT, setModalGLEMT] = useState(null); // balaustre da eleição GLEMT aberto no modal
   // ── Ata da sessão (Word) ──
   const [gerandoAta, setGerandoAta] = useState(null);
+  // Gerar ata é só para quem edita balaustres; acesso simples apenas visualiza
+  const podeGerarAta = !!permissoes?.pode_editar_balaustres;
   const [avisoSemBalaustre, setAvisoSemBalaustre] = useState(false);
   const hojeISO = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
   const COR_GRAU = { aprendiz: '#3b82f6', companheiro: '#10b981', mestre: '#8b5cf6' };
@@ -136,6 +138,7 @@ const Balaustres = ({
   const [escolhaModelo, setEscolhaModelo] = useState(null); // { balaustre, modelos }
 
   const gerarAta = async (balaustre) => {
+    if (!podeGerarAta) { showError('Você não tem permissão para gerar a ata.'); return; }
     if (ehPendente(balaustre)) {
       showError('Sessão pendente: marque como realizada (✅) para numerar o balaustre e gerar a ata.');
       return;
@@ -150,6 +153,7 @@ const Balaustres = ({
   };
 
   const gerarAtaComModelo = async (balaustre, modeloId) => {
+    if (!podeGerarAta) { showError('Você não tem permissão para gerar a ata.'); return; }
     setEscolhaModelo(null);
     setGerandoAta(balaustre.id);
     try {
@@ -653,10 +657,12 @@ const Balaustres = ({
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'0.75rem',flexWrap:'wrap',marginBottom:'1rem'}}>
         <h2 style={{margin:0,fontSize:'1.25rem',fontWeight:800,color:'var(--color-text)'}}>📜 Balaustres</h2>
         <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-          <button onClick={gerarAtaDeHoje} disabled={!!gerandoAta}
-            style={{height:'38px',padding:'0 1rem',background:'var(--color-surface-2)',color:'var(--color-text)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.82rem',cursor:'pointer'}}>
-            📄 Ata de hoje
-          </button>
+          {podeGerarAta && (
+            <button onClick={gerarAtaDeHoje} disabled={!!gerandoAta}
+              style={{height:'38px',padding:'0 1rem',background:'var(--color-surface-2)',color:'var(--color-text)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.82rem',cursor:'pointer'}}>
+              📄 Ata de hoje
+            </button>
+          )}
           {podeEditarModelos && onAbrirModelos && (
             <button onClick={onAbrirModelos}
               style={{height:'38px',padding:'0 1rem',background:'var(--color-surface-2)',color:'var(--color-text)',border:'1px solid var(--color-border)',borderRadius:'var(--radius-lg)',fontWeight:'700',fontSize:'0.82rem',cursor:'pointer'}}>
@@ -890,11 +896,11 @@ const Balaustres = ({
                               <button onClick={() => onAbrirEleicaoPosse && onAbrirEleicaoPosse()}
                                 style={{padding:'0.25rem 0.55rem',background:'rgba(201,168,76,0.15)',color:'#c9a84c',border:'1px solid rgba(201,168,76,0.4)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
                                 title="A ata desta sessão é gerada em Eleição e Posse — abrir">⚖️</button>
-                            ) : (
+                            ) : podeGerarAta ? (
                               <button onClick={() => gerarAta(balaustre)} disabled={gerandoAta === balaustre.id}
                                 style={{padding:'0.25rem 0.55rem',background:'rgba(201,168,76,0.15)',color:'#c9a84c',border:'1px solid rgba(201,168,76,0.4)',borderRadius:'var(--radius-md)',fontSize:'0.8rem',cursor:'pointer'}}
                                 title="Gerar ata (Word)">{gerandoAta === balaustre.id ? '⏳' : '📄'}</button>
-                            )}
+                            ) : null}
                             <button onClick={() => handleVisualizar(balaustre)}
                               style={{padding:'0.25rem 0.55rem',background:'rgba(16,185,129,0.15)',color:'#10b981',border:'1px solid rgba(16,185,129,0.3)',borderRadius:'var(--radius-md)',fontSize:'0.82rem',cursor:'pointer'}}
                               title="Visualizar">👁️</button>
@@ -1082,10 +1088,12 @@ const Balaustres = ({
 
               {/* Botão Fechar */}
               <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-                <button onClick={() => gerarAta(balaustreVisualizando)}
-                  style={{padding:'0.5rem 1.25rem',background:'#c9a84c',color:'#1a1a1a',border:'none',borderRadius:'var(--radius-lg)',fontWeight:700,cursor:'pointer'}}>
-                  📄 Gerar Ata
-                </button>
+                {podeGerarAta && (
+                  <button onClick={() => gerarAta(balaustreVisualizando)}
+                    style={{padding:'0.5rem 1.25rem',background:'#c9a84c',color:'#1a1a1a',border:'none',borderRadius:'var(--radius-lg)',fontWeight:700,cursor:'pointer'}}>
+                    📄 Gerar Ata
+                  </button>
+                )}
                 <button
                   onClick={() => setModalVisualizar(false)}
                   className="px-6 py-2 bg-gray-500 text-white rounded-lg transition-colors"
