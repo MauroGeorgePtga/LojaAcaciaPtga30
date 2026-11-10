@@ -409,7 +409,8 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
   const nomeParticipante = (p) => (p.irmao_id ? (p.irmaos?.nome || '') : (p.nome_externo || ''));
   const porNome = (a, b) => nomeParticipante(a).localeCompare(nomeParticipante(b), 'pt-BR', { sensitivity: 'base' });
 
-  const irmaos_part   = participantes.filter(p => p.irmao_id).sort(porNome);
+  const ehCusteador = (p) => comCusteio && !!p.custeador;
+  const irmaos_part   = participantes.filter(p => p.irmao_id).sort((a, b) => (Number(ehCusteador(b)) - Number(ehCusteador(a))) || porNome(a, b));
   const externos_part = participantes.filter(p => !p.irmao_id).sort(porNome);
 
   const thS = (center) => ({
@@ -441,10 +442,12 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
       <td style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)' }}>
         {p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?')}
         {comCusteio && p.irmao_id && p.custeador && (
-          <span title={`Própria ${fmtR(itemDe(p)?.custo)} + custeio famílias ${fmtR(itemDe(p)?.recebeCusteio)}`}
-            style={{ marginLeft: '0.4rem', fontSize: '0.62rem', fontWeight: 700, padding: '0.1rem 0.4rem', borderRadius: '999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.35)' }}>
-            CUSTEADOR +{fmtR(itemDe(p)?.recebeCusteio)}
-          </span>
+          <div style={{ marginTop: '0.2rem' }}>
+            <span title={`Própria ${fmtR(itemDe(p)?.custo)} + custeio famílias ${fmtR(itemDe(p)?.recebeCusteio)}`}
+              style={{ display: 'inline-block', fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.35)' }}>
+              Custeador + {fmtR(itemDe(p)?.recebeCusteio)}
+            </span>
+          </div>
         )}
       </td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>1+{p.adultos_convidados}</td>
@@ -1294,7 +1297,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       {/* ── Modal Lançar Cotas ──────────────────────────────── */}
       {modalCotas && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:1100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}>
-          <div style={{ background:'var(--color-surface)', borderRadius:'var(--radius-xl)', width:'100%', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.4)', overflow:'hidden' }}>
+          <div style={{ background:'var(--color-surface)', borderRadius:'var(--radius-xl)', width:'100%', maxWidth:'920px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.4)', overflow:'hidden' }}>
 
             {/* Header */}
             <div style={{ padding:'1.1rem 1.4rem', borderBottom:'1px solid var(--color-border)', background:'var(--color-surface-2)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -1449,7 +1452,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       {/* ── Modal Recalcular lançamentos ────────────────────── */}
       {modalRecalc && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:1100, display:'flex', alignItems:'center', justifyContent:'center', padding:'1rem' }}>
-          <div style={{ background:'var(--color-surface)', borderRadius:'var(--radius-xl)', width:'100%', maxWidth:'720px', maxHeight:'90vh', display:'flex', flexDirection:'column', border:'1px solid var(--color-border)' }}>
+          <div style={{ background:'var(--color-surface)', borderRadius:'var(--radius-xl)', width:'100%', maxWidth:'900px', maxHeight:'90vh', display:'flex', flexDirection:'column', border:'1px solid var(--color-border)' }}>
             <div style={{ padding:'1.1rem 1.4rem', borderBottom:'1px solid var(--color-border)', background:'var(--color-surface-2)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
                 <h3 style={{ fontWeight:700, fontSize:'1rem', color:'var(--color-text)', margin:0 }}>🔄 Recalcular lançamentos — {evento.nome}</h3>
