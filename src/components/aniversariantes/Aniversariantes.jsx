@@ -86,6 +86,14 @@ const enviarEmailAniversario = async (irmao, nomeLoja, nomeChanceler, logoUrl, m
 };
 
 // Função para retornar emoji adequado por idade e sexo
+// Classificação dos familiares (nível 2). Familiar ligado a mais de um irmão tem tipo combinado
+// (ex.: "Pai / Pai", "Neto / Neto"), por isso o tipo é dividido em partes.
+const partesTipo = (tipo) => String(tipo || '').split(' / ').map(t => t.trim()).filter(Boolean);
+const temTipo = (a, lista) => partesTipo(a?.tipo).some(t => lista.includes(t));
+// Família = qualquer familiar de nível 2 que não seja Esposa (tem lista própria) nem o próprio Irmão:
+// pais, filhos, enteados, netos, bisnetos, bodas... (qualquer vínculo novo entra sozinho)
+const ehFamilia = (a) => a?.nivel === 2 && a.tipo !== 'Irmão' && !temTipo(a, ['Esposa', 'Cunhada']);
+
 const obterEmojiPessoa = (idade, sexo, tipo = null) => {
   if (idade <= 2) return '👶';
   if (idade <= 12) return sexo === 'F' ? '👧' : '👦';
@@ -878,10 +886,10 @@ export default function Aniversariantes({ permissoes }) {
       const totalFamiliares = nivel2.length;
       const totalEventos = nivel4.length;
       const totalInMemoriam = nivel3.length;
-      const totalPais = aniversariantes.filter(a => a.tipo === 'Pai/Mãe').length;
-      const totalEsposas = aniversariantes.filter(a => a.tipo === 'Esposa').length;
+      const totalPais = aniversariantes.filter(a => a.nivel === 2 && temTipo(a, ['Pai', 'Mãe', 'Pai/Mãe'])).length;
+      const totalEsposas = aniversariantes.filter(a => a.nivel === 2 && temTipo(a, ['Esposa'])).length;
       const totalBodas = aniversariantes.filter(a => a.tipo === 'Bodas').length;
-      const totalFilhos = aniversariantes.filter(a => a.tipo === 'Filho(a)').length;
+      const totalFilhos = aniversariantes.filter(a => ehFamilia(a) && !temTipo(a, ['Pai', 'Mãe', 'Pai/Mãe', 'Bodas'])).length;
       const totalHoje = aniversariantes.filter(a => 
         a.proximo_aniversario.toDateString() === hoje.toDateString()
       ).length;
@@ -2421,7 +2429,7 @@ export default function Aniversariantes({ permissoes }) {
           : filtrarPorPeriodo(lista, periodoRelatorio);
 
         const felicitacoes  = aplicarFiltro(todos.filter(a => (a.tipo === 'Irmão' || a.tipo?.includes('Esposa') || a.tipo === 'Esposa') && a.nivel !== 3 && !a.falecido));
-        const familia       = aplicarFiltro(todos.filter(a => ['Pai/Mãe','Pai','Mãe','Filho','Filha','Filho(a)','Bodas'].includes(a.tipo) && a.nivel !== 3 && !a.falecido));
+        const familia       = aplicarFiltro(todos.filter(a => ehFamilia(a) && a.nivel !== 3 && !a.falecido));
         const comemorativas = buscaAtiva ? [] : filtrarPorPeriodo(todos.filter(a => a.nivel === 4), periodoRelatorio);
         const inMemoriam    = aplicarFiltro(todos.filter(a => a.nivel === 3));
 
@@ -2528,7 +2536,7 @@ export default function Aniversariantes({ permissoes }) {
             { label: 'IDADE', x: margin + 160, render: i => i.idade ? `${i.idade} anos` : '—' },
           ], [30, 70, 130]);
 
-          renderTabela('Familia - Pais, Filhos e Bodas', fam, [
+          renderTabela('Familia - Pais, Filhos, Netos e Bodas', fam, [
             { label: 'DATA', x: margin + 2, render: fmtD },
             { label: 'NOME', x: margin + 20, render: i => abreviarNomeExibicao(i), bold: true, maxWidth: 65,
               color: i => i.tipo === 'Bodas' ? [201,168,76] : null },
@@ -2755,7 +2763,7 @@ export default function Aniversariantes({ permissoes }) {
 
             {/* Tabela 2 — Família */}
             <TabelaSection
-              titulo="👨‍👩‍👧‍👦 Família — Pais, Filhos/Sobrinhos e Bodas"
+              titulo="👨‍👩‍👧‍👦 Família — Pais, Filhos, Netos e Bodas"
               cor="#10b981"
               dados={familia}
               colunas={[
