@@ -133,3 +133,65 @@ export const descricaoComCusteio = (descricaoBase, item) => {
   }
   return base;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resumo de um evento para o cartão da lista (mesmas regras do detalhe do evento)
+//   participantes: linhas de evento_rateio_participantes
+//   lancamentos:   linhas de lancamentos_loja (origem 'Loja' = despesas; 'Irmao' = cotas dos irmãos)
+// ─────────────────────────────────────────────────────────────────────────────
+const num = (v) => parseFloat(v) || 0;
+const inteiro = (v) => parseInt(v) || 0;
+
+export function resumirEvento(evento, participantes, lancamentos) {
+  const parts = participantes || [];
+  const lancs = lancamentos || [];
+
+  const totalDespesas = r2(lancs.filter((l) => l.origem_tipo === 'Loja' && l.tipo === 'despesa').reduce((s, l) => s + num(l.valor), 0));
+  const contribuicaoLoja = num(evento?.contribuicao_loja);
+  const baseRateio = Math.max(0, totalDespesas - contribuicaoLoja);
+  const totalCotas = parts.reduce((s, p) => s + num(p.cotas), 0);
+  const valorCalc = totalCotas > 0 ? baseRateio / totalCotas : 0;
+  const ajustado = num(evento?.valor_ajustado);
+  const valorCota = ajustado > 0 ? ajustado : valorCalc;
+
+  const rateio = calcularRateio(parts, valorCota, evento);
+  const irmaos = parts.filter((p) => p.irmao_id);
+  const externos = parts.filter((p) => !p.irmao_id);
+
+  const pessoasGrupo = (p) => 1 + inteiro(p.adultos_convidados) + inteiro(p.criancas_meia) + inteiro(p.criancas_gratuitas);
+  const pessoasConv = (p) => inteiro(p.conv_adultos) + inteiro(p.conv_meia) + inteiro(p.conv_gratuitas);
+
+  const convIrmaosValor = r2(irmaos.reduce((s, p) => s + (rateio.porParticipante[p.id]?.custoConvidados || 0), 0));
+  const cobradoIrmaos = rateio.resumo.cobradoIrmaos;
+
+  const lancIrmaos = lancs.filter((l) => l.origem_tipo === 'Irmao');
+  const lancado = r2(lancIrmaos.reduce((s, l) => s + num(l.valor), 0));
+  const recebido = r2(lancIrmaos.filter((l) => l.status === 'pago').reduce((s, l) => s + num(l.valor), 0));
+  const pendente = r2(lancado - recebido);
+
+  const cobraveis = irmaos.filter((p) => !semCobranca(p));
+  const idsLancados = new Set(lancIrmaos.map((l) => l.origem_irmao_id).filter(Boolean));
+
+  return {
+    totalDespesas, contribuicaoLoja, totalCotas, valorCota, valorAjustado: ajustado > 0,
+    // pessoas
+    qtdIrmaos: irmaos.length,
+    pessoasFamilia: irmaos.reduce((s, p) => s + pessoasGrupo(p), 0),
+    pessoasConvIrmaos: irmaos.reduce((s, p) => s + pessoasConv(p), 0),
+    qtdExternos: externos.length,
+    pessoasExternos: externos.reduce((s, p) => s + pessoasGrupo(p), 0),
+    // valores
+    irmaosFamiliaValor: r2(cobradoIrmaos - convIrmaosValor),
+    convIrmaosValor,
+    externosValor: rateio.resumo.externos,
+    custeioAtivo: rateio.ativo,
+    custeioPool: rateio.resumo.custeioPool,
+    lojaTotal: r2(rateio.resumo.lojaTotal + contribuicaoLoja),
+    cobradoIrmaos,
+    // recebimento
+    lancado, recebido, pendente,
+    faltaLancar: Math.max(0, r2(cobradoIrmaos - lancado)),
+    irmaosCobraveis: cobraveis.length,
+    irmaosLancados: cobraveis.filter((p) => idsLancados.has(p.irmao_id)).length,
+  };
+}
