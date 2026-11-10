@@ -629,6 +629,17 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
   // Rateio com custeio (custeadores, % próprio, isentos, parte da Loja)
   const rateio = useMemo(() => calcularRateio(participantes, valorCota, evento), [participantes, valorCota, evento]);
 
+  // Custo da Loja por irmão beneficiado (desconto, % próprio ou isenção)
+  const custoLoja = useMemo(() => {
+    const nomeDe = (q) => q.irmaos?.nome || '';
+    const linhas = participantes
+      .filter(q => q.irmao_id && !q.custeador && (rateio.porParticipante[q.id]?.parteLoja || 0) > 0)
+      .map(q => ({ p: q, it: rateio.porParticipante[q.id] }))
+      .sort((a, b) => nomeDe(a.p).localeCompare(nomeDe(b.p), 'pt-BR', { sensitivity: 'base' }));
+    const total = linhas.reduce((acc, l) => acc + l.it.parteLoja, 0);
+    return { linhas, total: Math.round(total * 100) / 100 };
+  }, [participantes, rateio]);
+
   // Lançamentos já criados que diferem do cálculo atual
   const divergencias = useMemo(() => {
     if (valorCota <= 0) return [];
@@ -994,6 +1005,34 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
         y = doc.lastAutoTable.finalY + 6;
       }
 
+      // Custo da Loja Acacia (irmaos beneficiados por desconto/isencao)
+      if (rateio.ativo && valorCota > 0 && custoLoja.linhas.length > 0) {
+        if (y > 230) { doc.addPage(); y = 20; }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(40, 40, 40);
+        doc.text('Custo da Loja Acacia - irmaos beneficiados', 14, y); y += 5;
+        autoTable(doc, {
+          startY: y,
+          head: [['Custo referente a', 'Custo familia', 'Condicao', 'Irmao paga', 'Custeadores', 'Loja paga']],
+          body: custoLoja.linhas.map(({ p: q, it }) => [
+            `Loja Acacia - ${abrev(q.irmaos?.nome)}`,
+            fmtM(it.custo),
+            it.isento ? 'Isento' : `Paga ${it.pctProprio}% (padrao ${rateio.pEvento}%)`,
+            fmtM(it.pagaProprio),
+            fmtM(it.parteCusteio),
+            fmtM(it.parteLoja),
+          ]),
+          foot: [['Subtotal irmaos beneficiados', '', '', '', '', fmtM(custoLoja.total)]],
+          showFoot: 'lastPage',
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [99, 102, 241], textColor: 255 },
+          footStyles: { fillColor: [224, 224, 250], textColor: [26, 26, 26], fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [248, 248, 248] },
+          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'center' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right', fontStyle: 'bold' } },
+          margin: { left: 14, right: 14 },
+        });
+        y = doc.lastAutoTable.finalY + 6;
+      }
+
       // Total geral do rateio
       const totalRateio = valorCota > 0 ? participantes.reduce((s2, p) => s2 + parseFloat(p.cotas) * valorCota, 0) : 0;
       doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(40, 40, 40);
@@ -1251,6 +1290,83 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
               />
             )}
           </div>
+
+          {/* Custo da Loja Acácia — irmãos beneficiados */}
+          {rateio.ativo && valorCota > 0 && (custoLoja.linhas.length > 0 || rateio.resumo.externos > 0) && (() => {
+            const th = (c) => ({ padding: '0.5rem 0.65rem', textAlign: c ? 'center' : 'left', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' });
+            const td = (c, extra = {}) => ({ padding: '0.55rem 0.65rem', textAlign: c ? 'center' : 'left', ...extra });
+            const condicao = (it) => it.isento ? 'Isento'
+              : `Paga ${it.pctProprio}% (padrão ${rateio.pEvento}%)`;
+            const nExternos = participantes.filter(q => !q.irmao_id).length;
+            return (
+              <div style={{ ...card, borderLeft: '4px solid #6366f1' }}>
+                <p style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.95rem', margin: '0 0 0.15rem' }}>
+                  🏛️ Custo da Loja Acácia — irmãos beneficiados
+                </p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.75rem' }}>
+                  Valor que a Loja paga referente a cada irmão com desconto ou isenção (diferença entre o custo da família, o que o irmão paga e a fatia dos custeadores).
+                </p>
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <thead>
+                      <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+                        <th style={th(false)}>Custo referente a</th>
+                        <th style={th(true)}>Custo da família</th>
+                        <th style={th(true)}>Condição</th>
+                        <th style={th(true)}>Irmão paga</th>
+                        <th style={th(true)}>Custeadores</th>
+                        <th style={th(true)}>Loja paga</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {custoLoja.linhas.map(({ p: q, it }, i) => (
+                        <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
+                          <td style={td(false, { fontWeight: 600, color: 'var(--color-text)' })}>
+                            <span style={{ color: '#6366f1' }}>Loja Acácia</span>
+                            <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
+                            {q.irmaos?.nome || '?'}
+                          </td>
+                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.custo)}</td>
+                          <td style={td(true, { color: it.isento ? '#f59e0b' : 'var(--color-text-muted)', fontWeight: it.isento ? 700 : 500, fontSize: '0.8rem' })}>{condicao(it)}</td>
+                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.pagaProprio)}</td>
+                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.parteCusteio)}</td>
+                          <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>
+                            {fmtR(it.parteLoja)}
+                            <span style={{ fontWeight: 500, fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.3rem' }}>({Math.round(it.parteLoja / it.custo * 1000) / 10}%)</span>
+                          </td>
+                        </tr>
+                      ))}
+                      {custoLoja.linhas.length > 0 && (
+                        <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+                          <td colSpan={5} style={td(false, { fontWeight: 700, color: 'var(--color-text)', fontSize: '0.8rem' })}>Subtotal — irmãos beneficiados ({custoLoja.linhas.length})</td>
+                          <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(custoLoja.total)}</td>
+                        </tr>
+                      )}
+                      {rateio.resumo.externos > 0 && (
+                        <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+                          <td colSpan={5} style={td(false, { fontWeight: 600, color: 'var(--color-text)', fontSize: '0.8rem' })}>
+                            <span style={{ color: '#6366f1' }}>Loja Acácia</span>
+                            <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
+                            Visitantes e convidados externos ({nExternos})
+                          </td>
+                          <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(rateio.resumo.externos)}</td>
+                        </tr>
+                      )}
+                      <tr style={{ background: 'rgba(99,102,241,0.12)', borderTop: '2px solid var(--color-border)' }}>
+                        <td colSpan={5} style={td(false, { fontWeight: 800, color: 'var(--color-text)' })}>TOTAL A CARGO DA LOJA</td>
+                        <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(rateio.resumo.lojaTotal)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                {rateio.numCusteadores === 0 && (
+                  <p style={{ fontSize: '0.72rem', color: '#f59e0b', margin: '0.5rem 0 0' }}>
+                    ⚠️ Nenhum custeador marcado: a fatia dos custeadores também está a cargo da Loja.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
