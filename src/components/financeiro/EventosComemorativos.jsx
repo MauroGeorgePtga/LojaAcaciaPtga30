@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
-import { calcularRateio, custeioAtivo, descricaoComCusteio } from './utils/rateioCusteio';
+import { calcularRateio, custeioAtivo, descricaoComCusteio, cotasConvidados, semCobranca } from './utils/rateioCusteio';
 
 // ─────────────────────────────────────────────
 //  Helpers
@@ -26,7 +26,7 @@ const hojeISO = () => new Date().toISOString().split('T')[0];
 // ─────────────────────────────────────────────
 const inp = {
   width: '100%', padding: '0.55rem 0.85rem', fontSize: '0.875rem',
-  background: 'var(--color-surface-2)', border: '1px solid var(--color-border)',
+  background: 'var(--color-bg)', border: '1px solid var(--color-border-light)',
   borderRadius: 'var(--radius-md)', color: 'var(--color-text)', outline: 'none',
   boxSizing: 'border-box',
 };
@@ -213,7 +213,62 @@ const PART_VAZIO = {
   custeador: false,
   percentual_proprio: '',
   isento: false,
+  isento_loja: false,
+  conv_adultos: 0,
+  conv_meia: 0,
+  conv_gratuitas: 0,
 };
+
+// Estilo dos campos do modal (foco, setas do select, números sem spinner)
+const CSS_CAMPOS = `
+  .agp-field:focus{border-color:var(--color-accent) !important;box-shadow:0 0 0 3px var(--color-accent-bg);outline:none}
+  .agp-field::placeholder{color:var(--color-text-muted);opacity:.8}
+  .agp-num::-webkit-outer-spin-button,.agp-num::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .agp-num{-moz-appearance:textfield}
+  .agp-select{appearance:none;-webkit-appearance:none;padding-right:2.2rem !important;background-repeat:no-repeat;background-position:right .8rem center;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+`;
+
+// Contador de pessoas com − / +
+const Contador = ({ label, legenda, valor, onChange, max = 99 }) => {
+  const v = parseInt(valor) || 0;
+  const passo = {
+    width: '2.5rem', flexShrink: 0, border: '1px solid var(--color-border-light)', background: 'var(--color-surface-2)',
+    color: 'var(--color-text)', fontSize: '1.15rem', fontWeight: 700, cursor: 'pointer', lineHeight: 1,
+  };
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.35rem', overflowWrap: 'anywhere' }}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        <button type="button" aria-label={`Diminuir: ${label}`} onClick={() => onChange(Math.max(0, v - 1))}
+          style={{ ...passo, borderRadius: 'var(--radius-md) 0 0 var(--radius-md)' }}>−</button>
+        <input className="agp-field agp-num" type="number" min="0" max={max} value={v} aria-label={label}
+          onChange={e => onChange(Math.min(max, Math.max(0, parseInt(e.target.value) || 0)))}
+          style={{ ...inp, minWidth: 0, borderRadius: 0, textAlign: 'center', fontWeight: 700, padding: '0.55rem 0.25rem' }} />
+        <button type="button" aria-label={`Aumentar: ${label}`} onClick={() => onChange(Math.min(max, v + 1))}
+          style={{ ...passo, borderRadius: '0 var(--radius-md) var(--radius-md) 0' }}>+</button>
+      </div>
+      {legenda && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.3rem' }}>{legenda}</div>}
+    </div>
+  );
+};
+
+const SecaoModal = ({ titulo, subtitulo, cor = '#c9a84c', children }) => (
+  <section style={{ border: '1px solid var(--color-border-light)', borderLeft: `3px solid ${cor}`, borderRadius: 'var(--radius-md)', padding: '0.9rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+    <div>
+      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--color-text)' }}>{titulo}</div>
+      {subtitulo && <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginTop: '0.15rem', lineHeight: 1.45 }}>{subtitulo}</div>}
+    </div>
+    {children}
+  </section>
+);
+
+const opcaoCaixa = (ativo) => ({
+  display: 'flex', alignItems: 'flex-start', gap: '0.65rem', padding: '0.7rem 0.8rem', borderRadius: 'var(--radius-md)',
+  border: `1px solid ${ativo ? 'var(--color-accent)' : 'var(--color-border-light)'}`,
+  background: ativo ? 'var(--color-accent-bg)' : 'var(--color-bg)',
+  cursor: 'pointer', fontSize: '0.83rem', color: 'var(--color-text)', lineHeight: 1.45,
+});
 
 const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, evento, valorCota = 0 }) => {
   const [form, setForm] = useState(PART_VAZIO);
@@ -232,31 +287,37 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
         custeador: !!partEdit.custeador,
         percentual_proprio: partEdit.percentual_proprio || '',
         isento: !!partEdit.isento,
+        isento_loja: !!partEdit.isento_loja,
+        conv_adultos: partEdit.conv_adultos || 0,
+        conv_meia: partEdit.conv_meia || 0,
+        conv_gratuitas: partEdit.conv_gratuitas || 0,
       } : PART_VAZIO);
       setErro('');
     }
   }, [aberto, partEdit]);
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const ehIrmao = form.tipo === 'irmao';
 
-  // Cálculo de cotas em tempo real
-  const cotaCalc = 1 + (parseInt(form.adultos_convidados) || 0) + ((parseInt(form.criancas_meia) || 0) * 0.5);
-  const valorEstimado = evento?.valor_ajustado ? cotaCalc * parseFloat(evento.valor_ajustado) : null;
+  // Cotas em tempo real: grupo/família + convidados do irmão
+  const cotasFamilia = 1 + (parseInt(form.adultos_convidados) || 0) + ((parseInt(form.criancas_meia) || 0) * 0.5);
+  const cotasConv = ehIrmao ? cotasConvidados(form) : 0;
+  const cotaCalc = cotasFamilia + cotasConv;
 
-  // Custeio: simulação da divisão para este participante
-  const custeioOn = custeioAtivo(evento) && form.tipo === 'irmao';
-  const simulacao = (custeioOn && valorCota > 0)
+  // Simulação da divisão para este participante
+  const custeioOn = custeioAtivo(evento) && ehIrmao;
+  const simulacao = (ehIrmao && valorCota > 0)
     ? calcularRateio(
         [
-          { id: 'sim', irmao_id: 1, cotas: cotaCalc, custeador: form.custeador, percentual_proprio: form.percentual_proprio, isento: form.isento },
-          ...(form.custeador ? [] : [{ id: 'dummy', irmao_id: 2, cotas: 0, custeador: true }]),
+          { id: 'sim', irmao_id: 1, cotas: cotaCalc, conv_adultos: form.conv_adultos, conv_meia: form.conv_meia, custeador: form.custeador, percentual_proprio: form.percentual_proprio, isento: form.isento, isento_loja: form.isento_loja },
+          ...((form.custeador || !custeioOn) ? [] : [{ id: 'dummy', irmao_id: 2, cotas: 0, custeador: true }]),
         ],
         valorCota, evento
       ).porParticipante.sim
     : null;
 
   const handleSalvar = async () => {
-    if (form.tipo === 'irmao' && !form.irmao_id) { setErro('Selecione um irmão.'); return; }
+    if (ehIrmao && !form.irmao_id) { setErro('Selecione um irmão.'); return; }
     if (form.tipo === 'externo' && !form.nome_externo.trim()) { setErro('Informe o nome do convidado externo.'); return; }
     if (form.percentual_proprio !== '' && (isNaN(parseFloat(form.percentual_proprio)) || parseFloat(form.percentual_proprio) < 0 || parseFloat(form.percentual_proprio) > 100)) { setErro('O % a pagar deve ficar entre 0 e 100.'); return; }
     setSalvando(true); setErro('');
@@ -267,133 +328,176 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
 
   if (!aberto) return null;
 
-  const numStyle = { ...inp, textAlign: 'center' };
+  const idadeGrat = evento?.idade_gratuita ?? 5;
+  const idadeMeia = evento?.idade_meia ?? 11;
+  const rotAdultos = 'Adultos';
+  const rotMeia = `Crianças ${idadeGrat + 1}–${idadeMeia} anos`;
+  const rotGrat = `Crianças até ${idadeGrat} anos`;
+  const irmaosDisponiveis = irmaos.filter(i =>
+    ['regular', 'licenciado'].includes(String(i.situacao || 'regular').toLowerCase()) || String(i.id) === String(form.irmao_id));
 
   return (
     <div style={overlay} onClick={e => e.target === e.currentTarget && onFechar()}>
-      <div style={modalBox('520px')}>
+      <style>{CSS_CAMPOS}</style>
+      <div style={{ ...modalBox('640px'), display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 2rem)' }}>
         <div style={mHead}>
           <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
             {partEdit ? '✏️ Editar Participante' : '👤 Adicionar Participante'}
           </h3>
-          <button onClick={onFechar} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.4rem', lineHeight: 1 }}>×</button>
+          <button onClick={onFechar} aria-label="Fechar" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '1.4rem', lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+
+        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', flex: 1, minHeight: 0 }}>
 
           {/* Tipo */}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {[['irmao','👤 Irmão da Loja'],['externo','🌍 Convidado Externo']].map(([v,l]) => (
-              <button key={v} onClick={() => f('tipo', v)} style={{
-                flex: 1, padding: '0.6rem', borderRadius: 'var(--radius-md)',
-                border: `1px solid ${form.tipo === v ? 'rgba(201,168,76,0.4)' : 'var(--color-border)'}`,
-                background: form.tipo === v ? 'rgba(201,168,76,0.12)' : 'var(--color-surface-2)',
+            {[['irmao', '👤 Irmão da Loja'], ['externo', '🌍 Convidado Externo']].map(([v, l]) => (
+              <button key={v} type="button" onClick={() => f('tipo', v)} style={{
+                flex: 1, padding: '0.65rem 0.5rem', borderRadius: 'var(--radius-md)',
+                border: `1px solid ${form.tipo === v ? 'rgba(201,168,76,0.6)' : 'var(--color-border-light)'}`,
+                background: form.tipo === v ? 'rgba(201,168,76,0.14)' : 'var(--color-bg)',
                 color: form.tipo === v ? '#c9a84c' : 'var(--color-text-muted)',
                 fontWeight: form.tipo === v ? 700 : 500, cursor: 'pointer', fontSize: '0.85rem',
               }}>{l}</button>
             ))}
           </div>
 
-          {/* Irmão ou externo */}
-          {form.tipo === 'irmao' ? (
-            <div>
-              <label style={lbl}>Irmão *</label>
-              <select style={inp} value={form.irmao_id} onChange={e => f('irmao_id', e.target.value)}>
-                <option value="">Selecione...</option>
-                {irmaos
-                  .filter(i => ['regular', 'licenciado'].includes(String(i.situacao || 'regular').toLowerCase()) || String(i.id) === String(form.irmao_id))
-                  .map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-              </select>
-            </div>
-          ) : (
-            <div>
-              <label style={lbl}>Nome do Convidado Externo *</label>
-              <input style={inp} value={form.nome_externo} onChange={e => f('nome_externo', e.target.value)} placeholder="Nome completo" />
-            </div>
-          )}
+          {/* Participante */}
+          <SecaoModal titulo={ehIrmao ? 'Irmão' : 'Convidado externo'} cor="#6366f1">
+            {ehIrmao ? (
+              <div>
+                <label style={lbl}>Irmão *</label>
+                <select className="agp-field agp-select" style={{ ...inp, height: '2.6rem' }} value={form.irmao_id} onChange={e => f('irmao_id', e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {irmaosDisponiveis.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                </select>
+              </div>
+            ) : (
+              <div>
+                <label style={lbl}>Nome do convidado externo *</label>
+                <input className="agp-field" style={{ ...inp, height: '2.6rem' }} value={form.nome_externo} onChange={e => f('nome_externo', e.target.value)} placeholder="Nome completo (e Loja de origem, se visitante)" />
+              </div>
+            )}
+          </SecaoModal>
 
-          {/* Convidados */}
-          <div style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.85rem' }}>
-            <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', marginBottom: '0.65rem' }}>
-              👥 Composição do Grupo
-              <span style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--color-text-muted)', marginLeft: '0.5rem' }}>
-                (o próprio participante já é contado como 1 adulto)
-              </span>
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem' }}>
-              <div>
-                <label style={lbl}>Adultos Convidados</label>
-                <input style={numStyle} type="number" min="0" max="99" value={form.adultos_convidados} onChange={e => f('adultos_convidados', parseInt(e.target.value) || 0)} />
-                <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '0.2rem', textAlign: 'center' }}>cota cheia cada</p>
-              </div>
-              <div>
-                <label style={lbl}>Crianças {evento?.idade_gratuita + 1 || 6}–{evento?.idade_meia || 11} anos</label>
-                <input style={numStyle} type="number" min="0" max="99" value={form.criancas_meia} onChange={e => f('criancas_meia', parseInt(e.target.value) || 0)} />
-                <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '0.2rem', textAlign: 'center' }}>meia cota cada</p>
-              </div>
-              <div>
-                <label style={lbl}>Crianças ≤{evento?.idade_gratuita || 5} anos</label>
-                <input style={numStyle} type="number" min="0" max="99" value={form.criancas_gratuitas} onChange={e => f('criancas_gratuitas', parseInt(e.target.value) || 0)} />
-                <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '0.2rem', textAlign: 'center' }}>gratuito</p>
-              </div>
+          {/* Família / grupo */}
+          <SecaoModal
+            titulo={ehIrmao ? '👨‍👩‍👧 Família do irmão' : '👥 Composição do grupo'}
+            subtitulo={ehIrmao
+              ? `O irmão já conta como 1 adulto.${custeioOn ? ' A família segue as regras do custeio (% do irmão).' : ''}`
+              : 'O convidado já conta como 1 adulto.'}
+            cor="#10b981">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.85rem' }}>
+              <Contador label={rotAdultos} legenda="cota cheia cada" valor={form.adultos_convidados} onChange={v => f('adultos_convidados', v)} />
+              <Contador label={rotMeia} legenda="meia cota cada" valor={form.criancas_meia} onChange={v => f('criancas_meia', v)} />
+              <Contador label={rotGrat} legenda="gratuito" valor={form.criancas_gratuitas} onChange={v => f('criancas_gratuitas', v)} />
             </div>
-          </div>
+          </SecaoModal>
+
+          {/* Convidados do irmão (fora da família) */}
+          {ehIrmao && (
+            <SecaoModal
+              titulo="🎟️ Convidados do irmão (fora da família)"
+              subtitulo="Pagos 100% pelo irmão que convidou. Não entram em desconto, isenção ou custeio, e custeadores e Loja não pagam por eles."
+              cor="#f59e0b">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.85rem' }}>
+                <Contador label={rotAdultos} legenda="cota cheia cada" valor={form.conv_adultos} onChange={v => f('conv_adultos', v)} />
+                <Contador label={rotMeia} legenda="meia cota cada" valor={form.conv_meia} onChange={v => f('conv_meia', v)} />
+                <Contador label={rotGrat} legenda="só contagem" valor={form.conv_gratuitas} onChange={v => f('conv_gratuitas', v)} />
+              </div>
+            </SecaoModal>
+          )}
 
           {/* Custeio */}
           {custeioOn && (
-            <div style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-              <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--color-text)', margin: 0 }}>
-                🤝 Custeio <span style={{ fontSize: '0.72rem', fontWeight: 400, color: 'var(--color-text-muted)' }}>(irmão paga {evento.custeio_percentual_irmao}% por padrão)</span>
-              </p>
-              <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--color-text)', cursor: 'pointer' }}>
-                <input type="checkbox" checked={!!form.custeador} onChange={e => f('custeador', e.target.checked)} style={{ marginTop: '0.2rem' }} />
-                <span><strong>Custeador</strong> — paga 100% da própria família e convidados e divide igualmente com os demais custeadores o custeio das famílias dos irmãos</span>
+            <SecaoModal
+              titulo="🤝 Custeio da família"
+              subtitulo={`O irmão paga ${evento.custeio_percentual_irmao}% da família por padrão.`}
+              cor="#8b5cf6">
+              <label style={opcaoCaixa(!!form.custeador)}>
+                <input type="checkbox" checked={!!form.custeador} onChange={e => f('custeador', e.target.checked)} style={{ marginTop: '0.2rem', accentColor: 'var(--color-accent)' }} />
+                <span><strong>Custeador</strong><br /><span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>Paga 100% da família e dos convidados e divide, com os demais custeadores, o custeio das famílias dos irmãos.</span></span>
               </label>
+
               {!form.custeador && (
                 <>
                   <div>
-                    <label style={lbl}>% a pagar (opcional)</label>
-                    <input style={{ ...inp, opacity: form.isento ? 0.5 : 1 }} type="number" step="0.01" min="0" max="100" disabled={!!form.isento}
-                      value={form.percentual_proprio} onChange={e => f('percentual_proprio', e.target.value)} placeholder={`Vazio ou 0 = ${evento.custeio_percentual_irmao}% do evento`} />
-                    <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', margin: '0.2rem 0 0' }}>Acima de 0, prevalece sobre o % do evento. Os custeadores mantêm a fatia do evento; a diferença fica com a Loja.</p>
+                    <label style={lbl}>% a pagar da família (opcional)</label>
+                    <div style={{ position: 'relative' }}>
+                      <input className="agp-field agp-num" type="number" step="0.01" min="0" max="100" disabled={!!form.isento}
+                        style={{ ...inp, height: '2.6rem', paddingRight: '2.2rem', opacity: form.isento ? 0.5 : 1 }}
+                        value={form.percentual_proprio} onChange={e => f('percentual_proprio', e.target.value)}
+                        placeholder={`${evento.custeio_percentual_irmao} (padrão)`} />
+                      <span style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontWeight: 600 }}>%</span>
+                    </div>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '0.3rem 0 0', lineHeight: 1.4 }}>
+                      Vazio ou 0 usa o padrão do evento. Acima de 0, prevalece; os custeadores mantêm a fatia do evento e a diferença fica com a Loja.
+                    </p>
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: 'var(--color-text)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={!!form.isento} onChange={e => f('isento', e.target.checked)} />
-                    <span><strong>Isento</strong> — o irmão não paga; custeadores e Loja cobrem</span>
+
+                  <label style={opcaoCaixa(!!form.isento)}>
+                    <input type="checkbox" checked={!!form.isento} onChange={e => f('isento', e.target.checked)} style={{ marginTop: '0.2rem', accentColor: 'var(--color-accent)' }} />
+                    <span><strong>Isento</strong><br /><span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>A família não paga. Os convidados do irmão continuam sendo pagos por ele.</span></span>
                   </label>
+
+                  {form.isento && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', paddingLeft: '0.5rem' }}>
+                      <label style={opcaoCaixa(!form.isento_loja)}>
+                        <input type="radio" name="tipo_isencao" checked={!form.isento_loja} onChange={() => f('isento_loja', false)} style={{ marginTop: '0.2rem', accentColor: 'var(--color-accent)' }} />
+                        <span><strong>Custeadores + Loja</strong><br /><span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>Os custeadores pagam a fatia do evento e a Loja paga o restante.</span></span>
+                      </label>
+                      <label style={opcaoCaixa(!!form.isento_loja)}>
+                        <input type="radio" name="tipo_isencao" checked={!!form.isento_loja} onChange={() => f('isento_loja', true)} style={{ marginTop: '0.2rem', accentColor: 'var(--color-accent)' }} />
+                        <span><strong>Somente a Loja</strong><br /><span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>A Loja paga 100% da família; os custeadores não participam.</span></span>
+                      </label>
+                    </div>
+                  )}
                 </>
               )}
-              {simulacao && (
-                <p style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', margin: 0, lineHeight: 1.6 }}>
-                  {form.custeador
-                    ? <>Paga a própria família: <strong style={{ color: '#10b981' }}>{fmtR(simulacao.custo)}</strong> + a sua parte do custeio das famílias (calculada com todos os participantes).</>
-                    : <>Irmão paga <strong style={{ color: '#10b981' }}>{fmtR(simulacao.pagaProprio)}</strong> · Custeadores <strong style={{ color: '#8b5cf6' }}>{fmtR(simulacao.parteCusteio)}</strong> · Loja <strong style={{ color: '#6366f1' }}>{fmtR(simulacao.parteLoja)}</strong></>}
-                </p>
-              )}
-            </div>
+            </SecaoModal>
           )}
 
-          {/* Preview de cotas */}
-          <div style={{ background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 'var(--radius-md)', padding: '0.85rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-            <div>
-              <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '0.15rem' }}>TOTAL DE COTAS</p>
-              <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#c9a84c' }}>{cotaCalc.toFixed(1)}</p>
-            </div>
-            {valorEstimado !== null && (
+          {/* Resumo */}
+          <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border-light)', borderRadius: 'var(--radius-md)', padding: '0.9rem 1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
               <div>
-                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginBottom: '0.15rem' }}>VALOR ESTIMADO</p>
-                <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#10b981' }}>{fmtR(valorEstimado)}</p>
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Total de cotas</div>
+                <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#c9a84c', lineHeight: 1.1 }}>{cotaCalc.toFixed(1)}</div>
               </div>
-            )}
+              {ehIrmao && cotasConv > 0 && (
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text-muted)', textAlign: 'right' }}>
+                  família {cotasFamilia.toFixed(1)} + convidados {cotasConv.toFixed(1)}
+                </div>
+              )}
+            </div>
+            {simulacao ? (
+              <div style={{ marginTop: '0.7rem', paddingTop: '0.7rem', borderTop: '1px solid var(--color-border)', fontSize: '0.82rem', color: 'var(--color-text-muted)', lineHeight: 1.75 }}>
+                <div>Família: <strong style={{ color: 'var(--color-text)' }}>{fmtR(simulacao.custoFamilia)}</strong>
+                  {simulacao.custoConvidados > 0 && <> · Convidados (100%): <strong style={{ color: 'var(--color-text)' }}>{fmtR(simulacao.custoConvidados)}</strong></>}</div>
+                {custeioOn && !form.custeador && (
+                  <div>Família: irmão <strong style={{ color: '#10b981' }}>{fmtR(simulacao.pagaFamilia)}</strong> · custeadores <strong style={{ color: '#8b5cf6' }}>{fmtR(simulacao.parteCusteio)}</strong> · Loja <strong style={{ color: '#6366f1' }}>{fmtR(simulacao.parteLoja)}</strong></div>
+                )}
+                <div style={{ fontSize: '0.9rem', color: 'var(--color-text)' }}>
+                  {form.custeador
+                    ? <>Paga a própria família e convidados: <strong style={{ color: '#10b981' }}>{fmtR(simulacao.custo)}</strong> + a sua parte do custeio das famílias (calculada no rateio)</>
+                    : <>Total a pagar pelo irmão: <strong style={{ color: '#10b981' }}>{fmtR(simulacao.total)}</strong></>}
+                </div>
+              </div>
+            ) : (!ehIrmao && valorCota > 0) ? (
+              <div style={{ marginTop: '0.7rem', paddingTop: '0.7rem', borderTop: '1px solid var(--color-border)', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                Valor do grupo (a cargo da Loja): <strong style={{ color: 'var(--color-text)' }}>{fmtR(cotaCalc * valorCota)}</strong>
+              </div>
+            ) : null}
           </div>
 
-          {erro && <div style={{ padding: '0.6rem 0.85rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: '#ef4444' }}>{erro}</div>}
+          {erro && <div style={{ padding: '0.6rem 0.85rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 'var(--radius-md)', color: '#ef4444', fontSize: '0.85rem' }}>{erro}</div>}
+        </div>
 
-          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', paddingTop: '0.5rem', borderTop: '1px solid var(--color-border)' }}>
-            <button onClick={onFechar} style={{ padding: '0.6rem 1.1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}>Cancelar</button>
-            <button onClick={handleSalvar} disabled={salvando} style={{ ...btnPrimary, opacity: salvando ? 0.7 : 1 }}>
-              {salvando ? 'Salvando...' : partEdit ? '💾 Salvar' : '👤 Adicionar'}
-            </button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.6rem', padding: '0.9rem 1.25rem', borderTop: '1px solid var(--color-border)', background: 'var(--color-surface)', borderRadius: '0 0 var(--radius-xl) var(--radius-xl)' }}>
+          <button type="button" onClick={onFechar} style={{ padding: '0.55rem 1.1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border-light)', background: 'transparent', color: 'var(--color-text-muted)', fontSize: '0.875rem', cursor: 'pointer' }}>Cancelar</button>
+          <button type="button" onClick={handleSalvar} disabled={salvando} style={{ ...btnPrimary, opacity: salvando ? 0.6 : 1 }}>
+            {salvando ? 'Salvando...' : partEdit ? '💾 Salvar' : '👤 Adicionar'}
+          </button>
         </div>
       </div>
     </div>
@@ -451,6 +555,16 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
             </span>
           </div>
         )}
+        {p.irmao_id && ((parseInt(p.conv_adultos) || 0) + (parseInt(p.conv_meia) || 0) + (parseInt(p.conv_gratuitas) || 0)) > 0 && (
+          <div style={{ marginTop: '0.2rem', fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>
+            Convidados: {[
+              (parseInt(p.conv_adultos) || 0) > 0 && `${p.conv_adultos} adulto(s)`,
+              (parseInt(p.conv_meia) || 0) > 0 && `${p.conv_meia} meia`,
+              (parseInt(p.conv_gratuitas) || 0) > 0 && `${p.conv_gratuitas} gratuita(s)`,
+            ].filter(Boolean).join(' · ')}
+            {valorCota > 0 && itemDe(p)?.custoConvidados > 0 && <> — {fmtR(itemDe(p).custoConvidados)} (100% do irmão)</>}
+          </div>
+        )}
       </td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>1+{p.adultos_convidados}</td>
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{p.criancas_meia}</td>
@@ -463,7 +577,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
       )}
       {comCusteio && (
         <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-          {!p.irmao_id ? '—' : itemDe(p)?.custeador ? '100%' : itemDe(p)?.isento ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>Isento</span> : itemDe(p)?.personalizado ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{itemDe(p).pctProprio}%</span> : `${itemDe(p)?.pctProprio ?? 100}%`}
+          {!p.irmao_id ? '—' : itemDe(p)?.custeador ? '100%' : itemDe(p)?.isento ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{itemDe(p).isentoLoja ? 'Isento (Loja)' : 'Isento'}</span> : itemDe(p)?.personalizado ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{itemDe(p).pctProprio}%</span> : `${itemDe(p)?.pctProprio ?? 100}%`}
         </td>
       )}
       <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#10b981' }}>
@@ -608,8 +722,8 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       .eq('origem_tipo', 'Irmao');
     setLancCotas(cotasExist || []);
     const idsComLanc = new Set((cotasExist || []).map(l => l.origem_irmao_id).filter(Boolean));
-    const totalParticIrmaos = partsArr.filter(p => p.irmao_id && !p.isento).length;
-    const lancados = partsArr.filter(p => p.irmao_id && !p.isento && idsComLanc.has(p.irmao_id)).length;
+    const totalParticIrmaos = partsArr.filter(p => p.irmao_id && !semCobranca(p)).length;
+    const lancados = partsArr.filter(p => p.irmao_id && !semCobranca(p) && idsComLanc.has(p.irmao_id)).length;
     setStatusCotas({ total: totalParticIrmaos, lancados });
 
     setCarregando(false);
@@ -679,7 +793,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
     // Pré-selecionar irmãos que ainda não têm lançamento
     const preSelected = {};
     participantes
-      .filter(p => p.irmao_id && !p.isento && !jaLancados[p.irmao_id])
+      .filter(p => p.irmao_id && !semCobranca(p) && !jaLancados[p.irmao_id])
       .forEach(p => { preSelected[p.irmao_id] = true; });
     setCotasSelecionadas(preSelected);
 
@@ -699,7 +813,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       return;
     }
     const selecionados = participantes.filter(p =>
-      p.irmao_id && !p.isento && cotasSelecionadas[p.irmao_id]
+      p.irmao_id && !semCobranca(p) && cotasSelecionadas[p.irmao_id]
     );
     if (selecionados.length === 0) {
       showError('Selecione pelo menos um irmão.');
@@ -791,6 +905,10 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
       custeador: form.tipo === 'irmao' ? !!form.custeador : false,
       percentual_proprio: (form.tipo === 'irmao' && !form.custeador && !form.isento && parseFloat(form.percentual_proprio) > 0) ? parseFloat(form.percentual_proprio) : null,
       isento: (form.tipo === 'irmao' && !form.custeador) ? !!form.isento : false,
+      isento_loja: (form.tipo === 'irmao' && !form.custeador && form.isento) ? !!form.isento_loja : false,
+      conv_adultos: form.tipo === 'irmao' ? (parseInt(form.conv_adultos) || 0) : 0,
+      conv_meia: form.tipo === 'irmao' ? (parseInt(form.conv_meia) || 0) : 0,
+      conv_gratuitas: form.tipo === 'irmao' ? (parseInt(form.conv_gratuitas) || 0) : 0,
     };
     if (partEdit) {
       const { error } = await supabase.from('evento_rateio_participantes').update(payload).eq('id', partEdit.id);
@@ -956,7 +1074,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
               parseFloat(p.cotas).toFixed(1),
               valorCota > 0 ? fmtM(it ? it.total : parseFloat(p.cotas) * valorCota) : '-',
             ];
-            if (rateio.ativo) linha.push(it?.custeador ? `Custeador (inclui custeio ${fmtM(it.recebeCusteio)})` : it?.isento ? 'Isento' : it?.personalizado ? `${it.pctProprio}% proprio` : '');
+            if (rateio.ativo) linha.push([it?.custeador ? `Custeador (inclui custeio ${fmtM(it.recebeCusteio)})` : it?.isento ? (it.isentoLoja ? 'Isento (so Loja)' : 'Isento') : it?.personalizado ? `${it.pctProprio}% proprio` : '', it?.custoConvidados > 0 ? `Convidados ${fmtM(it.custoConvidados)}` : ''].filter(Boolean).join(' | '));
             return linha;
           }),
           foot: [[
@@ -1015,8 +1133,8 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
           head: [['Custo referente a', 'Custo familia', 'Condicao', 'Irmao paga', 'Custeadores', 'Loja paga']],
           body: custoLoja.linhas.map(({ p: q, it }) => [
             `Loja Acacia - ${abrev(q.irmaos?.nome)}`,
-            fmtM(it.custo),
-            it.isento ? 'Isento' : `Paga ${it.pctProprio}% (padrao ${rateio.pEvento}%)`,
+            fmtM(it.custoFamilia),
+            it.isento ? (it.isentoLoja ? 'Isento - so a Loja' : 'Isento') : `Paga ${it.pctProprio}% (padrao ${rateio.pEvento}%)`,
             fmtM(it.pagaProprio),
             fmtM(it.parteCusteio),
             fmtM(it.parteLoja),
@@ -1295,7 +1413,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
           {rateio.ativo && valorCota > 0 && (custoLoja.linhas.length > 0 || rateio.resumo.externos > 0) && (() => {
             const th = (c) => ({ padding: '0.5rem 0.65rem', textAlign: c ? 'center' : 'left', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' });
             const td = (c, extra = {}) => ({ padding: '0.55rem 0.65rem', textAlign: c ? 'center' : 'left', ...extra });
-            const condicao = (it) => it.isento ? 'Isento'
+            const condicao = (it) => it.isento ? (it.isentoLoja ? 'Isento — só a Loja' : 'Isento')
               : `Paga ${it.pctProprio}% (padrão ${rateio.pEvento}%)`;
             const nExternos = participantes.filter(q => !q.irmao_id).length;
             return (
@@ -1326,13 +1444,13 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                             <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
                             {q.irmaos?.nome || '?'}
                           </td>
-                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.custo)}</td>
+                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.custoFamilia)}</td>
                           <td style={td(true, { color: it.isento ? '#f59e0b' : 'var(--color-text-muted)', fontWeight: it.isento ? 700 : 500, fontSize: '0.8rem' })}>{condicao(it)}</td>
                           <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.pagaProprio)}</td>
                           <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.parteCusteio)}</td>
                           <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>
                             {fmtR(it.parteLoja)}
-                            <span style={{ fontWeight: 500, fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.3rem' }}>({Math.round(it.parteLoja / it.custo * 1000) / 10}%)</span>
+                            <span style={{ fontWeight: 500, fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.3rem' }}>({Math.round(it.parteLoja / it.custoFamilia * 1000) / 10}%)</span>
                           </td>
                         </tr>
                       ))}
@@ -1523,7 +1641,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                   <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.5rem 0', borderBottom:'1px solid var(--color-surface-2)', opacity: jaLancado ? 0.5 : 1 }}>
                     <input type="checkbox"
                       checked={selecionado}
-                      disabled={jaLancado || p.isento}
+                      disabled={jaLancado || semCobranca(p)}
                       onChange={e => setCotasSelecionadas(prev => ({ ...prev, [p.irmao_id]: e.target.checked }))}
                       style={{ cursor: jaLancado ? 'not-allowed' : 'pointer' }}
                     />
@@ -1531,11 +1649,11 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                       <span style={{ fontSize:'0.85rem', fontWeight:600, color:'var(--color-text)' }}>{nomeIrmao}</span>
                       {cotas !== 1 && <span style={{ fontSize:'0.72rem', color:'var(--color-text-muted)', marginLeft:'0.4rem' }}>({cotas} cotas)</span>}
                       {item?.custeador && <span style={{ fontSize:'0.68rem', color:'#8b5cf6', fontWeight:700, marginLeft:'0.4rem' }}>custeador (+{fmtR(item.recebeCusteio)})</span>}
-                      {item && !item.custeador && rateio.ativo && p.irmao_id && <span style={{ fontSize:'0.68rem', color: (item.isento || item.personalizado) ? '#f59e0b' : 'var(--color-text-muted)', marginLeft:'0.4rem' }}>{item.isento ? 'isento' : `${item.pctProprio}%`}</span>}
+                      {item && !item.custeador && rateio.ativo && p.irmao_id && <span style={{ fontSize:'0.68rem', color: (item.isento || item.personalizado) ? '#f59e0b' : 'var(--color-text-muted)', marginLeft:'0.4rem' }}>{item.isento ? (item.isentoLoja ? 'isento (só Loja)' : 'isento') : `${item.pctProprio}%`}</span>}
                     </div>
                     {jaLancado ? (
                       <span style={{ fontSize:'0.72rem', color:'#10b981', fontWeight:600 }}>✅ Já lançado</span>
-                    ) : p.isento ? (
+                    ) : semCobranca(p) ? (
                       <span style={{ fontSize:'0.72rem', color:'#f59e0b', fontWeight:600 }}>Isento — sem cobrança</span>
                     ) : (
                       <span style={{ fontSize:'0.85rem', fontWeight:700, color:'var(--color-accent)' }}>{fmtR(valor)}</span>
@@ -1549,7 +1667,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
             <div style={{ padding:'1rem 1.4rem', borderTop:'1px solid var(--color-border)', background:'var(--color-surface-2)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div style={{ fontSize:'0.82rem', color:'var(--color-text-muted)' }}>
                 Total: <strong style={{ color:'var(--color-accent)', fontSize:'0.95rem' }}>
-                  {fmtR(participantes.filter(p => p.irmao_id && !p.isento && cotasSelecionadas[p.irmao_id]).reduce((s, p) => s + (rateio.porParticipante[p.id]?.total ?? valorCota * parseFloat(p.cotas || 1)), 0))}
+                  {fmtR(participantes.filter(p => p.irmao_id && !semCobranca(p) && cotasSelecionadas[p.irmao_id]).reduce((s, p) => s + (rateio.porParticipante[p.id]?.total ?? valorCota * parseFloat(p.cotas || 1)), 0))}
                 </strong>
                 {' · '}
                 {Object.values(cotasSelecionadas).filter(Boolean).length} irmão(s)
