@@ -299,7 +299,9 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
               <label style={lbl}>Irmão *</label>
               <select style={inp} value={form.irmao_id} onChange={e => f('irmao_id', e.target.value)}>
                 <option value="">Selecione...</option>
-                {irmaos.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                {irmaos
+                  .filter(i => ['regular', 'licenciado'].includes(String(i.situacao || 'regular').toLowerCase()) || String(i.id) === String(form.irmao_id))
+                  .map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
               </select>
             </div>
           ) : (
@@ -1540,7 +1542,7 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
   };
 
   const carregarIrmaos = async () => {
-    const { data } = await supabase.from('irmaos').select('id, nome').order('nome');
+    const { data } = await supabase.from('irmaos').select('id, nome, situacao').order('nome');
     setIrmaos(data || []);
   };
 
