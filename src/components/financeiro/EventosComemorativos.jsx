@@ -507,9 +507,19 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
 // ─────────────────────────────────────────────
 //  Tabela de Participantes separada por grupo
 // ─────────────────────────────────────────────
+// Dois primeiros nomes; se o 2º for preposição, usa o primeiro + o último nome
+// (ex.: "Jose Elias da Costa" → "Jose Elias"; "Francisco de Assis Bisco" → "Francisco Bisco")
+const PREPOSICOES_NOME = ['de', 'da', 'do', 'das', 'dos', 'e'];
+const nomeCurto = (nome) => {
+  const partes = String(nome || '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length <= 2) return partes.join(' ');
+  if (PREPOSICOES_NOME.includes(partes[1].toLowerCase())) return `${partes[0]} ${partes[partes.length - 1]}`;
+  return `${partes[0]} ${partes[1]}`;
+};
+
 const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit, setModalPart, setConfirmExcluirPart, totalCotas, btnEdit, btnDanger, podeEditar = false, rateio = null }) => {
   const comCusteio = !!rateio?.ativo;
-  const nCols = comCusteio ? 10 : 8;
+  const nCols = comCusteio ? 11 : 9;
   const itemDe = (p) => rateio?.porParticipante?.[p.id];
   const aPagar = (p) => (itemDe(p) ? itemDe(p).total : parseFloat(p.cotas) * valorCota);
   const nomeParticipante = (p) => (p.irmao_id ? (p.irmaos?.nome || '') : (p.nome_externo || ''));
@@ -531,6 +541,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     <thead>
       <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
         <th style={thS(false)}>Participante</th>
+        <th style={thS(true)}></th>
         <th style={thS(true)}>Adultos<br/>(ele+acomp.)</th>
         <th style={thS(true)}>C.Meia</th>
         <th style={thS(true)}>C.Grat.</th>
@@ -559,12 +570,14 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     const bg = i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)';
     const cel = { padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' };
     const celConv = { padding: '0.4rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' };
+    const span = temConv ? 2 : 1;
+    const nomeCompleto = p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?');
 
     return (
       <>
         <tr style={{ borderBottom: temConv ? 'none' : '1px solid var(--color-border)', background: bg }}>
-          <td style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)' }}>
-            {p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?')}
+          <td rowSpan={span} style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)', verticalAlign: 'middle' }}>
+            <span title={nomeCompleto}>{p.irmao_id ? nomeCurto(nomeCompleto) : nomeCompleto}</span>
             {comCusteio && p.irmao_id && p.custeador && (
               <div style={{ marginTop: '0.2rem' }}>
                 <span title={`Própria ${fmtR(it?.custo)} + custeio famílias ${fmtR(it?.recebeCusteio)}`}
@@ -574,6 +587,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
               </div>
             )}
           </td>
+          <td style={{ ...cel, fontSize: '0.78rem', fontWeight: 600, textAlign: 'left', whiteSpace: 'nowrap' }}>{p.irmao_id ? 'Família' : 'Externo'}</td>
           <td style={cel}>1+{p.adultos_convidados}</td>
           <td style={cel}>{p.criancas_meia}</td>
           <td style={cel}>{p.criancas_gratuitas}</td>
@@ -585,25 +599,22 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
             </td>
           )}
           <td style={{ ...cel, fontWeight: 600, color: 'var(--color-text)' }}>{valorCota > 0 ? fmtR(valorFam) : '—'}</td>
-          <td rowSpan={temConv ? 2 : 1} style={{ ...cel, fontWeight: 800, color: '#10b981', fontSize: temConv ? '1rem' : undefined, verticalAlign: 'middle', borderLeft: temConv ? '1px solid var(--color-border)' : undefined }}>
+          <td rowSpan={span} style={{ ...cel, fontWeight: 700, color: '#10b981', verticalAlign: 'middle' }}>
             {valorCota > 0 ? fmtR(aPagar(p)) : '—'}
           </td>
           {!encerrado ? (
-            <td rowSpan={temConv ? 2 : 1} style={{ padding: '0.55rem 0.5rem', textAlign: 'right', verticalAlign: 'middle' }}>
+            <td rowSpan={span} style={{ padding: '0.55rem 0.5rem', textAlign: 'right', verticalAlign: 'middle' }}>
               <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
                 {podeEditar && <button onClick={() => { setPartEdit(p); setModalPart(true); }} style={btnEdit}>✏️</button>}
                 {podeEditar && <button onClick={() => setConfirmExcluirPart(p)} style={btnDanger}>🗑️</button>}
               </div>
             </td>
-          ) : <td rowSpan={temConv ? 2 : 1} />}
+          ) : <td rowSpan={span} />}
         </tr>
 
         {temConv && (
           <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'rgba(245,158,11,0.06)' }}>
-            <td style={{ padding: '0.4rem 0.65rem 0.4rem 1.4rem', fontSize: '0.78rem', fontWeight: 600, color: '#f59e0b', borderLeft: '3px solid #f59e0b' }}>
-              ↳ Convidados do irmão
-              <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}> (100% dele)</span>
-            </td>
+            <td style={{ ...celConv, textAlign: 'left', fontWeight: 600, color: '#f59e0b', whiteSpace: 'nowrap' }}>Convidados</td>
             <td style={celConv}>{conv.adultos}</td>
             <td style={celConv}>{conv.meia}</td>
             <td style={celConv}>{conv.grat}</td>
@@ -624,7 +635,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     return (
       <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
         <td style={{ padding: '0.45rem 0.65rem', fontWeight: 700, color: cor, fontSize: '0.78rem' }}>Subtotal {label}</td>
-        <td colSpan={3} />
+        <td colSpan={4} />
         <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#3b82f6', fontSize: '0.85rem' }}>{cotas.toFixed(1)}</td>
         {comCusteio && <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{valorCota > 0 ? fmtR(custoLista) : '—'}</td>}
         {comCusteio && <td />}
@@ -678,7 +689,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
         {/* Total geral */}
         <tfoot>
           <tr style={{ background: 'var(--color-surface-2)', borderTop: '2px solid var(--color-border)' }}>
-            <td colSpan={4} style={{ padding: '0.55rem 0.65rem', fontWeight: 700, color: 'var(--color-text)' }}>TOTAL GERAL</td>
+            <td colSpan={5} style={{ padding: '0.55rem 0.65rem', fontWeight: 700, color: 'var(--color-text)' }}>TOTAL GERAL</td>
             <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#3b82f6' }}>{totalCotas.toFixed(1)}</td>
             {comCusteio && <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)' }}>{valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0)) : '—'}</td>}
             {comCusteio && <td />}
@@ -1482,7 +1493,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                               <td style={td(false, { fontWeight: 600, color: 'var(--color-text)' })}>
                                 <span style={{ color: '#6366f1' }}>Loja Acácia</span>
                                 <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
-                                {q.irmaos?.nome || '?'}
+                                <span title={q.irmaos?.nome || ''}>{nomeCurto(q.irmaos?.nome || '?')}</span>
                               </td>
                               <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.custoFamilia)}</td>
                               <td style={td(true, { color: it.isento ? '#f59e0b' : 'var(--color-text-muted)', fontWeight: it.isento ? 700 : 500, fontSize: '0.8rem' })}>{condicao(it)}</td>
