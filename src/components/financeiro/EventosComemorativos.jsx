@@ -509,7 +509,7 @@ const ModalParticipante = ({ aberto, onFechar, onSalvar, partEdit, irmaos, event
 // ─────────────────────────────────────────────
 const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit, setModalPart, setConfirmExcluirPart, totalCotas, btnEdit, btnDanger, podeEditar = false, rateio = null }) => {
   const comCusteio = !!rateio?.ativo;
-  const nCols = comCusteio ? 9 : 7;
+  const nCols = comCusteio ? 10 : 8;
   const itemDe = (p) => rateio?.porParticipante?.[p.id];
   const aPagar = (p) => (itemDe(p) ? itemDe(p).total : parseFloat(p.cotas) * valorCota);
   const nomeParticipante = (p) => (p.irmao_id ? (p.irmaos?.nome || '') : (p.nome_externo || ''));
@@ -537,6 +537,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
         <th style={thS(true)}>Cotas</th>
         {comCusteio && <th style={thS(true)}>Custo</th>}
         {comCusteio && <th style={thS(true)}>% Próprio</th>}
+        <th style={thS(true)}>Subtotal</th>
         <th style={thS(true)}>Valor a Pagar</th>
         <th style={thS(true)}></th>
       </tr>
@@ -583,7 +584,10 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
               {!p.irmao_id ? '—' : it?.custeador ? '100%' : it?.isento ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{it.isentoLoja ? 'Isento (Loja)' : 'Isento'}</span> : it?.personalizado ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{it.pctProprio}%</span> : `${it?.pctProprio ?? 100}%`}
             </td>
           )}
-          <td style={{ ...cel, fontWeight: 700, color: '#10b981' }}>{valorCota > 0 ? fmtR(valorFam) : '—'}</td>
+          <td style={{ ...cel, fontWeight: 600, color: 'var(--color-text)' }}>{valorCota > 0 ? fmtR(valorFam) : '—'}</td>
+          <td rowSpan={temConv ? 2 : 1} style={{ ...cel, fontWeight: 800, color: '#10b981', fontSize: temConv ? '1rem' : undefined, verticalAlign: 'middle', borderLeft: temConv ? '1px solid var(--color-border)' : undefined }}>
+            {valorCota > 0 ? fmtR(aPagar(p)) : '—'}
+          </td>
           {!encerrado ? (
             <td rowSpan={temConv ? 2 : 1} style={{ padding: '0.55rem 0.5rem', textAlign: 'right', verticalAlign: 'middle' }}>
               <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
@@ -606,7 +610,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
             <td style={{ ...celConv, fontWeight: 700, color: '#3b82f6' }}>{cotasConv.toFixed(1)}</td>
             {comCusteio && <td style={celConv}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>}
             {comCusteio && <td style={celConv}>100%</td>}
-            <td style={{ ...celConv, fontWeight: 700, color: '#10b981' }}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>
+            <td style={{ ...celConv, fontWeight: 600, color: 'var(--color-text)' }}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>
           </tr>
         )}
       </>
@@ -624,6 +628,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
         <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#3b82f6', fontSize: '0.85rem' }}>{cotas.toFixed(1)}</td>
         {comCusteio && <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{valorCota > 0 ? fmtR(custoLista) : '—'}</td>}
         {comCusteio && <td />}
+        <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{valorCota > 0 ? fmtR(valor) : '—'}</td>
         <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#10b981', fontSize: '0.85rem' }}>{valorCota > 0 ? fmtR(valor) : '—'}</td>
         <td />
       </tr>
@@ -677,6 +682,9 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
             <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#3b82f6' }}>{totalCotas.toFixed(1)}</td>
             {comCusteio && <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)' }}>{valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0)) : '—'}</td>}
             {comCusteio && <td />}
+            <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)' }}>
+              {valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + aPagar(p), 0)) : '—'}
+            </td>
             <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#10b981' }}>
               {valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + aPagar(p), 0)) : '—'}
             </td>
