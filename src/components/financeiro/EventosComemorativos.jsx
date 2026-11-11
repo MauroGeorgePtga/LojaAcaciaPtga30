@@ -531,7 +531,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     <thead>
       <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
         <th style={thS(false)}>Participante</th>
-        <th style={thS(true)}>Adultos<br/>(ele+conv.)</th>
+        <th style={thS(true)}>Adultos<br/>(ele+acomp.)</th>
         <th style={thS(true)}>C.Meia</th>
         <th style={thS(true)}>C.Grat.</th>
         <th style={thS(true)}>Cotas</th>
@@ -543,56 +543,75 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     </thead>
   );
 
-  const Linha = ({ p, i }) => (
-    <tr style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
-      <td style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)' }}>
-        {p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?')}
-        {comCusteio && p.irmao_id && p.custeador && (
-          <div style={{ marginTop: '0.2rem' }}>
-            <span title={`Própria ${fmtR(itemDe(p)?.custo)} + custeio famílias ${fmtR(itemDe(p)?.recebeCusteio)}`}
-              style={{ display: 'inline-block', fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.35)' }}>
-              Custeador + {fmtR(itemDe(p)?.recebeCusteio)}
-            </span>
-          </div>
+  const Linha = ({ p, i }) => {
+    const it = itemDe(p);
+    const conv = p.irmao_id ? {
+      adultos: parseInt(p.conv_adultos) || 0,
+      meia: parseInt(p.conv_meia) || 0,
+      grat: parseInt(p.conv_gratuitas) || 0,
+    } : { adultos: 0, meia: 0, grat: 0 };
+    const temConv = (conv.adultos + conv.meia + conv.grat) > 0;
+    const cotasConv = p.irmao_id ? cotasConvidados(p) : 0;
+    const cotasFam = parseFloat(p.cotas || 0) - cotasConv;
+    const custoFam = it ? it.custoFamilia : cotasFam * valorCota;
+    const valorFam = it ? (it.custeador ? it.custoFamilia + it.recebeCusteio : it.pagaFamilia) : cotasFam * valorCota;
+    const bg = i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)';
+    const cel = { padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' };
+    const celConv = { padding: '0.4rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' };
+
+    return (
+      <>
+        <tr style={{ borderBottom: temConv ? 'none' : '1px solid var(--color-border)', background: bg }}>
+          <td style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)' }}>
+            {p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?')}
+            {comCusteio && p.irmao_id && p.custeador && (
+              <div style={{ marginTop: '0.2rem' }}>
+                <span title={`Própria ${fmtR(it?.custo)} + custeio famílias ${fmtR(it?.recebeCusteio)}`}
+                  style={{ display: 'inline-block', fontSize: '0.68rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: '999px', background: 'rgba(139,92,246,0.15)', color: '#8b5cf6', border: '1px solid rgba(139,92,246,0.35)' }}>
+                  Custeador + {fmtR(it?.recebeCusteio)}
+                </span>
+              </div>
+            )}
+          </td>
+          <td style={cel}>1+{p.adultos_convidados}</td>
+          <td style={cel}>{p.criancas_meia}</td>
+          <td style={cel}>{p.criancas_gratuitas}</td>
+          <td style={{ ...cel, fontWeight: 700, color: '#3b82f6' }}>{cotasFam.toFixed(1)}</td>
+          {comCusteio && <td style={cel}>{valorCota > 0 ? fmtR(custoFam) : '—'}</td>}
+          {comCusteio && (
+            <td style={{ ...cel, fontSize: '0.78rem' }}>
+              {!p.irmao_id ? '—' : it?.custeador ? '100%' : it?.isento ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{it.isentoLoja ? 'Isento (Loja)' : 'Isento'}</span> : it?.personalizado ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{it.pctProprio}%</span> : `${it?.pctProprio ?? 100}%`}
+            </td>
+          )}
+          <td style={{ ...cel, fontWeight: 700, color: '#10b981' }}>{valorCota > 0 ? fmtR(valorFam) : '—'}</td>
+          {!encerrado ? (
+            <td rowSpan={temConv ? 2 : 1} style={{ padding: '0.55rem 0.5rem', textAlign: 'right', verticalAlign: 'middle' }}>
+              <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                {podeEditar && <button onClick={() => { setPartEdit(p); setModalPart(true); }} style={btnEdit}>✏️</button>}
+                {podeEditar && <button onClick={() => setConfirmExcluirPart(p)} style={btnDanger}>🗑️</button>}
+              </div>
+            </td>
+          ) : <td rowSpan={temConv ? 2 : 1} />}
+        </tr>
+
+        {temConv && (
+          <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'rgba(245,158,11,0.06)' }}>
+            <td style={{ padding: '0.4rem 0.65rem 0.4rem 1.4rem', fontSize: '0.78rem', fontWeight: 600, color: '#f59e0b', borderLeft: '3px solid #f59e0b' }}>
+              ↳ Convidados do irmão
+              <span style={{ fontWeight: 400, color: 'var(--color-text-muted)' }}> (100% dele)</span>
+            </td>
+            <td style={celConv}>{conv.adultos}</td>
+            <td style={celConv}>{conv.meia}</td>
+            <td style={celConv}>{conv.grat}</td>
+            <td style={{ ...celConv, fontWeight: 700, color: '#3b82f6' }}>{cotasConv.toFixed(1)}</td>
+            {comCusteio && <td style={celConv}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>}
+            {comCusteio && <td style={celConv}>100%</td>}
+            <td style={{ ...celConv, fontWeight: 700, color: '#10b981' }}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>
+          </tr>
         )}
-        {p.irmao_id && ((parseInt(p.conv_adultos) || 0) + (parseInt(p.conv_meia) || 0) + (parseInt(p.conv_gratuitas) || 0)) > 0 && (
-          <div style={{ marginTop: '0.2rem', fontSize: '0.7rem', fontWeight: 500, color: 'var(--color-text-muted)' }}>
-            Convidados: {[
-              (parseInt(p.conv_adultos) || 0) > 0 && `${p.conv_adultos} adulto(s)`,
-              (parseInt(p.conv_meia) || 0) > 0 && `${p.conv_meia} meia`,
-              (parseInt(p.conv_gratuitas) || 0) > 0 && `${p.conv_gratuitas} gratuita(s)`,
-            ].filter(Boolean).join(' · ')}
-            {valorCota > 0 && itemDe(p)?.custoConvidados > 0 && <> — {fmtR(itemDe(p).custoConvidados)} (100% do irmão)</>}
-          </div>
-        )}
-      </td>
-      <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>1+{p.adultos_convidados}</td>
-      <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{p.criancas_meia}</td>
-      <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>{p.criancas_gratuitas}</td>
-      <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#3b82f6' }}>{parseFloat(p.cotas).toFixed(1)}</td>
-      {comCusteio && (
-        <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-          {valorCota > 0 ? fmtR(parseFloat(p.cotas) * valorCota) : '—'}
-        </td>
-      )}
-      {comCusteio && (
-        <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
-          {!p.irmao_id ? '—' : itemDe(p)?.custeador ? '100%' : itemDe(p)?.isento ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{itemDe(p).isentoLoja ? 'Isento (Loja)' : 'Isento'}</span> : itemDe(p)?.personalizado ? <span style={{ color: '#f59e0b', fontWeight: 700 }}>{itemDe(p).pctProprio}%</span> : `${itemDe(p)?.pctProprio ?? 100}%`}
-        </td>
-      )}
-      <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#10b981' }}>
-        {valorCota > 0 ? fmtR(aPagar(p)) : '—'}
-      </td>
-      {!encerrado ? (
-        <td style={{ padding: '0.55rem 0.5rem', textAlign: 'right' }}>
-          <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
-            {podeEditar && <button onClick={() => { setPartEdit(p); setModalPart(true); }} style={btnEdit}>✏️</button>}
-            {podeEditar && <button onClick={() => setConfirmExcluirPart(p)} style={btnDanger}>🗑️</button>}
-          </div>
-        </td>
-      ) : <td />}
-    </tr>
-  );
+      </>
+    );
+  };
 
   const SubtotalRow = ({ lista, cor, label }) => {
     const cotas = lista.reduce((s, p) => s + parseFloat(p.cotas), 0);
@@ -1409,74 +1428,128 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
             )}
           </div>
 
-          {/* Custo da Loja Acácia — irmãos beneficiados */}
+          {/* Custo da Loja Acácia — irmãos beneficiados e visitantes */}
           {rateio.ativo && valorCota > 0 && (custoLoja.linhas.length > 0 || rateio.resumo.externos > 0) && (() => {
             const th = (c) => ({ padding: '0.5rem 0.65rem', textAlign: c ? 'center' : 'left', fontSize: '0.7rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' });
             const td = (c, extra = {}) => ({ padding: '0.55rem 0.65rem', textAlign: c ? 'center' : 'left', ...extra });
+            const caixa = { border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', overflowX: 'auto' };
             const condicao = (it) => it.isento ? (it.isentoLoja ? 'Isento — só a Loja' : 'Isento')
               : `Paga ${it.pctProprio}% (padrão ${rateio.pEvento}%)`;
-            const nExternos = participantes.filter(q => !q.irmao_id).length;
+
+            // Visitantes/externos: cada cadastro = 1 visitante + seus acompanhantes
+            const nomeExt = (q) => q.nome_externo || '';
+            const externosLista = participantes.filter(q => !q.irmao_id)
+              .sort((a, b2) => nomeExt(a).localeCompare(nomeExt(b2), 'pt-BR', { sensitivity: 'base' }));
+            const acompanhantes = (q) => (parseInt(q.adultos_convidados) || 0) + (parseInt(q.criancas_meia) || 0) + (parseInt(q.criancas_gratuitas) || 0);
+            const totVisitantes = externosLista.length;
+            const totAcomp = externosLista.reduce((acc, q) => acc + acompanhantes(q), 0);
+            const totCotasExt = externosLista.reduce((acc, q) => acc + parseFloat(q.cotas || 0), 0);
+
             return (
               <div style={{ ...card, borderLeft: '4px solid #6366f1' }}>
                 <p style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: '0.95rem', margin: '0 0 0.15rem' }}>
-                  🏛️ Custo da Loja Acácia — irmãos beneficiados
+                  🏛️ Custo da Loja Acácia
                 </p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.75rem' }}>
-                  Valor que a Loja paga referente a cada irmão com desconto ou isenção (diferença entre o custo da família, o que o irmão paga e a fatia dos custeadores).
-                </p>
-                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                    <thead>
-                      <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
-                        <th style={th(false)}>Custo referente a</th>
-                        <th style={th(true)}>Custo da família</th>
-                        <th style={th(true)}>Condição</th>
-                        <th style={th(true)}>Irmão paga</th>
-                        <th style={th(true)}>Custeadores</th>
-                        <th style={th(true)}>Loja paga</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {custoLoja.linhas.map(({ p: q, it }, i) => (
-                        <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
-                          <td style={td(false, { fontWeight: 600, color: 'var(--color-text)' })}>
-                            <span style={{ color: '#6366f1' }}>Loja Acácia</span>
-                            <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
-                            {q.irmaos?.nome || '?'}
-                          </td>
-                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.custoFamilia)}</td>
-                          <td style={td(true, { color: it.isento ? '#f59e0b' : 'var(--color-text-muted)', fontWeight: it.isento ? 700 : 500, fontSize: '0.8rem' })}>{condicao(it)}</td>
-                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.pagaProprio)}</td>
-                          <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.parteCusteio)}</td>
-                          <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>
-                            {fmtR(it.parteLoja)}
-                            <span style={{ fontWeight: 500, fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.3rem' }}>({Math.round(it.parteLoja / it.custoFamilia * 1000) / 10}%)</span>
-                          </td>
-                        </tr>
-                      ))}
-                      {custoLoja.linhas.length > 0 && (
-                        <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
-                          <td colSpan={5} style={td(false, { fontWeight: 700, color: 'var(--color-text)', fontSize: '0.8rem' })}>Subtotal — irmãos beneficiados ({custoLoja.linhas.length})</td>
-                          <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(custoLoja.total)}</td>
-                        </tr>
-                      )}
-                      {rateio.resumo.externos > 0 && (
-                        <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
-                          <td colSpan={5} style={td(false, { fontWeight: 600, color: 'var(--color-text)', fontSize: '0.8rem' })}>
-                            <span style={{ color: '#6366f1' }}>Loja Acácia</span>
-                            <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
-                            Visitantes e convidados externos ({nExternos})
-                          </td>
-                          <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(rateio.resumo.externos)}</td>
-                        </tr>
-                      )}
-                      <tr style={{ background: 'rgba(99,102,241,0.12)', borderTop: '2px solid var(--color-border)' }}>
-                        <td colSpan={5} style={td(false, { fontWeight: 800, color: 'var(--color-text)' })}>TOTAL A CARGO DA LOJA</td>
-                        <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(rateio.resumo.lojaTotal)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+
+                {custoLoja.linhas.length > 0 && (
+                  <>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.75rem' }}>
+                      Irmãos beneficiados: valor que a Loja paga referente a cada irmão com desconto ou isenção (diferença entre o custo da família, o que o irmão paga e a fatia dos custeadores).
+                    </p>
+                    <div style={caixa}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+                            <th style={th(false)}>Custo referente a</th>
+                            <th style={th(true)}>Custo da família</th>
+                            <th style={th(true)}>Condição</th>
+                            <th style={th(true)}>Irmão paga</th>
+                            <th style={th(true)}>Custeadores</th>
+                            <th style={th(true)}>Loja paga</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {custoLoja.linhas.map(({ p: q, it }, i) => (
+                            <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
+                              <td style={td(false, { fontWeight: 600, color: 'var(--color-text)' })}>
+                                <span style={{ color: '#6366f1' }}>Loja Acácia</span>
+                                <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
+                                {q.irmaos?.nome || '?'}
+                              </td>
+                              <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.custoFamilia)}</td>
+                              <td style={td(true, { color: it.isento ? '#f59e0b' : 'var(--color-text-muted)', fontWeight: it.isento ? 700 : 500, fontSize: '0.8rem' })}>{condicao(it)}</td>
+                              <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.pagaFamilia)}</td>
+                              <td style={td(true, { color: 'var(--color-text-muted)' })}>{fmtR(it.parteCusteio)}</td>
+                              <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>
+                                {fmtR(it.parteLoja)}
+                                <span style={{ fontWeight: 500, fontSize: '0.7rem', color: 'var(--color-text-muted)', marginLeft: '0.3rem' }}>({Math.round(it.parteLoja / it.custoFamilia * 1000) / 10}%)</span>
+                              </td>
+                            </tr>
+                          ))}
+                          <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+                            <td colSpan={5} style={td(false, { fontWeight: 700, color: 'var(--color-text)', fontSize: '0.8rem' })}>Subtotal — irmãos beneficiados ({custoLoja.linhas.length})</td>
+                            <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(custoLoja.total)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {externosLista.length > 0 && (
+                  <div style={{ marginTop: custoLoja.linhas.length > 0 ? '1.1rem' : '0.5rem' }}>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', margin: '0 0 0.75rem' }}>
+                      Visitantes e convidados externos: cada cadastro conta como 1 visitante, mais os acompanhantes dele. Tudo custeado pela Loja.
+                    </p>
+                    <div style={caixa}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                        <thead>
+                          <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+                            <th style={th(false)}>Custo referente a</th>
+                            <th style={th(true)}>Visitante</th>
+                            <th style={th(true)}>Acompanhantes</th>
+                            <th style={th(true)}>Total de pessoas</th>
+                            <th style={th(true)}>Cotas</th>
+                            <th style={th(true)}>Loja paga</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {externosLista.map((q, i) => {
+                            const ac = acompanhantes(q);
+                            return (
+                              <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
+                                <td style={td(false, { fontWeight: 600, color: 'var(--color-text)' })}>
+                                  <span style={{ color: '#6366f1' }}>Loja Acácia</span>
+                                  <span style={{ color: 'var(--color-text-muted)', fontWeight: 400 }}> — </span>
+                                  {q.nome_externo || '?'}
+                                </td>
+                                <td style={td(true, { color: 'var(--color-text-muted)' })}>1</td>
+                                <td style={td(true, { color: 'var(--color-text-muted)' })}>{ac}</td>
+                                <td style={td(true, { fontWeight: 600, color: 'var(--color-text)' })}>{1 + ac}</td>
+                                <td style={td(true, { color: '#3b82f6', fontWeight: 600 })}>{parseFloat(q.cotas || 0).toFixed(1)}</td>
+                                <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(rateio.porParticipante[q.id]?.custo || 0)}</td>
+                              </tr>
+                            );
+                          })}
+                          <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+                            <td style={td(false, { fontWeight: 700, color: 'var(--color-text)', fontSize: '0.8rem' })}>Subtotal — visitantes e externos</td>
+                            <td style={td(true, { fontWeight: 800, color: 'var(--color-text)' })}>{totVisitantes}</td>
+                            <td style={td(true, { fontWeight: 800, color: 'var(--color-text)' })}>{totAcomp}</td>
+                            <td style={td(true, { fontWeight: 800, color: 'var(--color-text)' })}>{totVisitantes + totAcomp}</td>
+                            <td style={td(true, { fontWeight: 800, color: '#3b82f6' })}>{totCotasExt.toFixed(1)}</td>
+                            <td style={td(true, { fontWeight: 800, color: '#6366f1' })}>{fmtR(rateio.resumo.externos)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ marginTop: '0.9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '0.7rem 0.85rem', borderRadius: 'var(--radius-md)', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)' }}>
+                  <span style={{ fontWeight: 800, color: 'var(--color-text)', fontSize: '0.85rem' }}>TOTAL A CARGO DA LOJA</span>
+                  <span style={{ fontWeight: 800, color: '#6366f1', fontSize: '1rem' }}>{fmtR(rateio.resumo.lojaTotal)}</span>
                 </div>
+
                 {rateio.numCusteadores === 0 && (
                   <p style={{ fontSize: '0.72rem', color: '#f59e0b', margin: '0.5rem 0 0' }}>
                     ⚠️ Nenhum custeador marcado: a fatia dos custeadores também está a cargo da Loja.
