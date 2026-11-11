@@ -82,13 +82,14 @@ const EVENTO_VAZIO = {
 const colunasGrade = (n) => ({ 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 3, 7: 5, 8: 4, 9: 3, 10: 5 }[n] || 4);
 const CSS_GRADE = `
   .agp-gw{container-type:inline-size}
-  .agp-grade{display:grid;grid-template-columns:repeat(var(--cols,3),minmax(0,1fr));gap:.6rem}
-  @container (max-width:680px){.agp-grade{grid-template-columns:repeat(3,minmax(0,1fr))}}
-  @container (max-width:440px){.agp-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .agp-grade{--cols:var(--n,3);display:flex;flex-wrap:wrap;justify-content:center;gap:.6rem}
+  .agp-grade>*{flex:0 0 calc((100% - (var(--cols) - 1) * .6rem) / var(--cols));min-width:0;box-sizing:border-box}
+  @container (max-width:680px){.agp-grade{--cols:3}}
+  @container (max-width:440px){.agp-grade{--cols:2}}
 `;
 const GradeIndicadores = ({ n, style, children }) => (
   <div className="agp-gw" style={style}>
-    <div className="agp-grade" style={{ '--cols': colunasGrade(n) }}>{children}</div>
+    <div className="agp-grade" style={{ '--n': colunasGrade(n) }}>{children}</div>
   </div>
 );
 
