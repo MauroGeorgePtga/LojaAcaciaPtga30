@@ -615,16 +615,17 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     const cotasConv = p.irmao_id ? cotasConvidados(p) : 0;
     const cotasFam = parseFloat(p.cotas || 0) - cotasConv;
     const custoFam = it ? it.custoFamilia : cotasFam * valorCota;
-    const valorFam = it ? (it.custeador ? it.custoFamilia + it.recebeCusteio : it.pagaFamilia) : cotasFam * valorCota;
+    const valorFam = it ? (it.custeador ? it.custoFamilia : it.pagaFamilia) : cotasFam * valorCota;
     const bg = i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)';
     const cel = { padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' };
     const celConv = { padding: '0.4rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem' };
-    const span = temConv ? 2 : 1;
+    const ehCust = !!(comCusteio && p.irmao_id && it?.custeador);   // custeador: ganha a linha do custeio das famílias
+    const span = 1 + (temConv ? 1 : 0) + (ehCust ? 1 : 0);
     const nomeCompleto = p.irmao_id ? (p.irmaos?.nome || '?') : (p.nome_externo || '?');
 
     return (
       <>
-        <tr style={{ borderBottom: temConv ? 'none' : '1px solid var(--color-border)', background: bg }}>
+        <tr style={{ borderBottom: span > 1 ? 'none' : '1px solid var(--color-border)', background: bg }}>
           <td rowSpan={span} style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)', verticalAlign: 'middle' }}>
             <span title={nomeCompleto}>{p.irmao_id ? nomeCurto(nomeCompleto) : nomeCompleto}</span>
             {comCusteio && p.irmao_id && p.custeador && (
@@ -662,7 +663,7 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
         </tr>
 
         {temConv && (
-          <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'rgba(245,158,11,0.06)' }}>
+          <tr style={{ borderBottom: ehCust ? 'none' : '1px solid var(--color-border)', background: 'rgba(245,158,11,0.06)' }}>
             <td style={{ ...celConv, textAlign: 'left', fontWeight: 600, color: '#f59e0b', whiteSpace: 'nowrap' }}>Convidados</td>
             <td style={celConv}>{conv.adultos}</td>
             <td style={celConv}>{conv.meia}</td>
@@ -671,6 +672,20 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
             {comCusteio && <td style={celConv}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>}
             {comCusteio && <td style={celConv}>100%</td>}
             <td style={{ ...celConv, fontWeight: 600, color: 'var(--color-text)' }}>{valorCota > 0 ? fmtR(it?.custoConvidados || 0) : '—'}</td>
+          </tr>
+        )}
+
+        {ehCust && (
+          <tr style={{ borderBottom: '1px solid var(--color-border)', background: 'rgba(139,92,246,0.07)' }}>
+            <td title="Parte do custeio das famílias dos irmãos, dividida igualmente entre os custeadores"
+              style={{ ...celConv, textAlign: 'left', fontWeight: 600, color: '#8b5cf6', whiteSpace: 'nowrap' }}>Custeio</td>
+            <td style={celConv}>—</td>
+            <td style={celConv}>—</td>
+            <td style={celConv}>—</td>
+            <td style={celConv}>—</td>
+            <td style={celConv}>{valorCota > 0 ? fmtR(it.recebeCusteio) : '—'}</td>
+            <td style={celConv} title="Dividido igualmente entre os custeadores">÷ {rateio?.numCusteadores || 1}</td>
+            <td style={{ ...celConv, fontWeight: 600, color: 'var(--color-text)' }}>{valorCota > 0 ? fmtR(it.recebeCusteio) : '—'}</td>
           </tr>
         )}
       </>
