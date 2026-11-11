@@ -78,6 +78,20 @@ const EVENTO_VAZIO = {
   descricao: '', idade_gratuita: 5, idade_meia: 11, valor_ajustado: '', contribuicao_loja: '', custeio_percentual_irmao: '',
 };
 
+// Grade de quadros de dados: 4→4, 5→5, 6→3x3, 7→5+2, 8→4x4 (recolhe conforme a largura disponível)
+const colunasGrade = (n) => ({ 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 3, 7: 5, 8: 4, 9: 3, 10: 5 }[n] || 4);
+const CSS_GRADE = `
+  .agp-gw{container-type:inline-size}
+  .agp-grade{display:grid;grid-template-columns:repeat(var(--cols,3),minmax(0,1fr));gap:.6rem}
+  @container (max-width:680px){.agp-grade{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @container (max-width:440px){.agp-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
+`;
+const GradeIndicadores = ({ n, style, children }) => (
+  <div className="agp-gw" style={style}>
+    <div className="agp-grade" style={{ '--cols': colunasGrade(n) }}>{children}</div>
+  </div>
+);
+
 const ModalEvento = ({ aberto, onFechar, onSalvar, eventoEdit }) => {
   const [form, setForm] = useState(EVENTO_VAZIO);
   const [salvando, setSalvando] = useState(false);
@@ -519,7 +533,8 @@ const nomeCurto = (nome) => {
 
 const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit, setModalPart, setConfirmExcluirPart, totalCotas, btnEdit, btnDanger, podeEditar = false, rateio = null }) => {
   const comCusteio = !!rateio?.ativo;
-  const nCols = comCusteio ? 11 : 9;
+  const nColsIrm = comCusteio ? 11 : 9;
+  const nColsExt = 7;
   const itemDe = (p) => rateio?.porParticipante?.[p.id];
   const aPagar = (p) => (itemDe(p) ? itemDe(p).total : parseFloat(p.cotas) * valorCota);
   const nomeParticipante = (p) => (p.irmao_id ? (p.irmaos?.nome || '') : (p.nome_externo || ''));
@@ -537,7 +552,19 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     textTransform: 'uppercase', whiteSpace: 'nowrap',
   });
 
-  const Cabecalho = () => (
+  const Cabecalho = ({ externo = false }) => externo ? (
+    <thead>
+      <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
+        <th style={{ ...thS(false), width: '42%' }}>Participante</th>
+        <th style={thS(true)}>Adultos<br/>(ele+acomp.)</th>
+        <th style={thS(true)}>C.Meia</th>
+        <th style={thS(true)}>C.Grat.</th>
+        <th style={thS(true)}>Cotas</th>
+        <th style={thS(true)}>Valor total</th>
+        <th style={thS(true)}></th>
+      </tr>
+    </thead>
+  ) : (
     <thead>
       <tr style={{ background: 'var(--color-surface-2)', borderBottom: '1px solid var(--color-border)' }}>
         <th style={thS(false)}>Participante</th>
@@ -556,6 +583,27 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
   );
 
   const Linha = ({ p, i }) => {
+    if (!p.irmao_id) {
+      const c0 = { padding: '0.55rem 0.65rem', textAlign: 'center', color: 'var(--color-text-muted)' };
+      return (
+        <tr style={{ borderBottom: '1px solid var(--color-border)', background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.06)' }}>
+          <td style={{ padding: '0.55rem 0.65rem', fontWeight: 600, color: 'var(--color-text)' }}>{p.nome_externo || '?'}</td>
+          <td style={c0}>1+{p.adultos_convidados}</td>
+          <td style={c0}>{p.criancas_meia}</td>
+          <td style={c0}>{p.criancas_gratuitas}</td>
+          <td style={{ ...c0, fontWeight: 700, color: '#3b82f6' }}>{parseFloat(p.cotas || 0).toFixed(1)}</td>
+          <td style={{ ...c0, fontWeight: 700, color: '#10b981' }}>{valorCota > 0 ? fmtR(aPagar(p)) : '—'}</td>
+          {!encerrado ? (
+            <td style={{ padding: '0.55rem 0.5rem', textAlign: 'right' }}>
+              <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                {podeEditar && <button onClick={() => { setPartEdit(p); setModalPart(true); }} style={btnEdit}>✏️</button>}
+                {podeEditar && <button onClick={() => setConfirmExcluirPart(p)} style={btnDanger}>🗑️</button>}
+              </div>
+            </td>
+          ) : <td />}
+        </tr>
+      );
+    }
     const it = itemDe(p);
     const conv = p.irmao_id ? {
       adultos: parseInt(p.conv_adultos) || 0,
@@ -628,10 +676,21 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     );
   };
 
-  const SubtotalRow = ({ lista, cor, label }) => {
+  const SubtotalRow = ({ lista, cor, label, externo = false }) => {
     const cotas = lista.reduce((s, p) => s + parseFloat(p.cotas), 0);
     const valor = lista.reduce((s, p) => s + aPagar(p), 0);
     const custoLista = lista.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0);
+    if (externo) {
+      return (
+        <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
+          <td style={{ padding: '0.45rem 0.65rem', fontWeight: 700, color: cor, fontSize: '0.78rem' }}>Subtotal {label}</td>
+          <td colSpan={3} />
+          <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#3b82f6', fontSize: '0.85rem' }}>{cotas.toFixed(1)}</td>
+          <td style={{ padding: '0.45rem 0.65rem', textAlign: 'center', fontWeight: 700, color: '#10b981', fontSize: '0.85rem' }}>{valorCota > 0 ? fmtR(valor) : '—'}</td>
+          <td />
+        </tr>
+      );
+    }
     return (
       <tr style={{ background: 'var(--color-surface-2)', borderTop: '1px solid var(--color-border)' }}>
         <td style={{ padding: '0.45rem 0.65rem', fontWeight: 700, color: cor, fontSize: '0.78rem' }}>Subtotal {label}</td>
@@ -646,63 +705,56 @@ const TabelaParticipantes = ({ participantes, valorCota, encerrado, setPartEdit,
     );
   };
 
+  const totalValor = participantes.reduce((acc, q) => acc + aPagar(q), 0);
+  const totalCusto = participantes.reduce((acc, q) => acc + parseFloat(q.cotas) * valorCota, 0);
+  const tituloGrupo = (cor, bg, texto, cols, borda) => (
+    <thead>
+      <tr style={{ background: bg, borderTop: borda ? '2px solid var(--color-border)' : 'none' }}>
+        <th colSpan={cols} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: cor, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{texto}</th>
+      </tr>
+    </thead>
+  );
+
   return (
     <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
 
-        {/* Grupo Irmãos */}
-        {irmaos_part.length > 0 && (
-          <>
-            <thead>
-              <tr style={{ background: 'rgba(201,168,76,0.12)' }}>
-                <th colSpan={nCols} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#c9a84c', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  👤 Irmãos da Loja ({irmaos_part.length})
-                </th>
-              </tr>
-            </thead>
+      {/* Grupo Irmãos */}
+      {irmaos_part.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            {tituloGrupo('#c9a84c', 'rgba(201,168,76,0.12)', `👤 Irmãos da Loja (${irmaos_part.length})`, nColsIrm, false)}
             <Cabecalho />
             <tbody>
               {irmaos_part.map((p, i) => <Linha key={p.id} p={p} i={i} />)}
               {externos_part.length > 0 && <SubtotalRow lista={irmaos_part} cor='#c9a84c' label='Irmãos' />}
             </tbody>
-          </>
-        )}
+          </table>
+        </div>
+      )}
 
-        {/* Grupo Externos */}
-        {externos_part.length > 0 && (
-          <>
-            <thead>
-              <tr style={{ background: 'rgba(99,102,241,0.12)', borderTop: irmaos_part.length > 0 ? '2px solid var(--color-border)' : 'none' }}>
-                <th colSpan={nCols} style={{ padding: '0.45rem 0.65rem', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  🌍 Convidados Externos ({externos_part.length})
-                </th>
-              </tr>
-            </thead>
-            <Cabecalho />
+      {/* Grupo Externos (tabela própria: só nome, adultos, crianças, cotas e valor total) */}
+      {externos_part.length > 0 && (
+        <div style={{ overflowX: 'auto', borderTop: irmaos_part.length > 0 ? '2px solid var(--color-border)' : 'none' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            {tituloGrupo('#6366f1', 'rgba(99,102,241,0.12)', `🌍 Convidados Externos (${externos_part.length})`, nColsExt, false)}
+            <Cabecalho externo />
             <tbody>
               {externos_part.map((p, i) => <Linha key={p.id} p={p} i={i} />)}
-              {irmaos_part.length > 0 && <SubtotalRow lista={externos_part} cor='#6366f1' label='Externos' />}
+              {irmaos_part.length > 0 && <SubtotalRow lista={externos_part} cor='#6366f1' label='Externos' externo />}
             </tbody>
-          </>
-        )}
+          </table>
+        </div>
+      )}
 
-        {/* Total geral */}
-        <tfoot>
-          <tr style={{ background: 'var(--color-surface-2)', borderTop: '2px solid var(--color-border)' }}>
-            <td colSpan={5} style={{ padding: '0.55rem 0.65rem', fontWeight: 700, color: 'var(--color-text)' }}>TOTAL GERAL</td>
-            <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#3b82f6' }}>{totalCotas.toFixed(1)}</td>
-            {comCusteio && <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)' }}>{valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + parseFloat(p.cotas) * valorCota, 0)) : '—'}</td>}
-            {comCusteio && <td />}
-            <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 700, color: 'var(--color-text-muted)' }}>
-              {valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + aPagar(p), 0)) : '—'}
-            </td>
-            <td style={{ padding: '0.55rem 0.65rem', textAlign: 'center', fontWeight: 800, color: '#10b981' }}>
-              {valorCota > 0 ? fmtR(participantes.reduce((s, p) => s + aPagar(p), 0)) : '—'}
-            </td>
-            <td />
-          </tr>
-        </tfoot>
-      </table>
+      {/* Total geral */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem 1.5rem', padding: '0.65rem 0.85rem', background: 'var(--color-surface-2)', borderTop: '2px solid var(--color-border)' }}>
+        <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>TOTAL GERAL</span>
+        <span style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', alignItems: 'baseline', fontSize: '0.85rem' }}>
+          <span style={{ color: 'var(--color-text-muted)' }}>Cotas <strong style={{ color: '#3b82f6', fontSize: '0.95rem' }}>{totalCotas.toFixed(1)}</strong></span>
+          {comCusteio && <span style={{ color: 'var(--color-text-muted)' }}>Custo <strong style={{ color: 'var(--color-text)' }}>{valorCota > 0 ? fmtR(totalCusto) : '—'}</strong></span>}
+          <span style={{ color: 'var(--color-text-muted)' }}>Valor a pagar <strong style={{ color: '#10b981', fontSize: '0.95rem' }}>{valorCota > 0 ? fmtR(totalValor) : '—'}</strong></span>
+        </span>
+      </div>
     </div>
   );
 };
@@ -1303,8 +1355,7 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
           {/* Cards de resumo */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: '0.65rem' }}>
-            {[
+          {(() => { const cardsResumo = [
               { label: 'Total Despesas', val: fmtR(totalDespesas), cor: '#ef4444', bg: 'rgba(239,68,68,0.1)' },
               ...(contribuicaoLoja > 0 ? [
                 { label: 'Contribuição Loja', val: fmtR(contribuicaoLoja), cor: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
@@ -1317,13 +1368,17 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
                 { label: 'Custeadores (famílias)', val: fmtR(rateio.resumo.custeioPool), cor: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
                 { label: 'Parte da Loja', val: fmtR(rateio.resumo.lojaTotal), cor: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
               ] : []),
-            ].map(({ label, val, cor, bg }) => (
-              <div key={label} style={{ background: 'var(--color-surface)', border: `1px solid ${cor}33`, borderRadius: 'var(--radius-md)', padding: '0.75rem' }}>
-                <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{label}</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: 800, color: cor }}>{val}</div>
-              </div>
-            ))}
-          </div>
+          ];
+          return (
+            <GradeIndicadores n={cardsResumo.length}>
+              {cardsResumo.map(({ label, val, cor }) => (
+                <div key={label} style={{ background: 'var(--color-surface)', border: `1px solid ${cor}33`, borderRadius: 'var(--radius-md)', padding: '0.75rem', minWidth: 0 }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', marginBottom: '0.25rem' }}>{label}</div>
+                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: cor, overflowWrap: 'anywhere' }}>{val}</div>
+                </div>
+              ))}
+            </GradeIndicadores>
+          ); })()}
 
           {rateio.ativo && valorCota > 0 && (
             <div style={{ ...card, borderLeft: '4px solid #8b5cf6', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.7 }}>
@@ -1976,7 +2031,8 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
 
   if (eventoAtivo) {
     return (
-      <div style={{ padding: '1.5rem', maxWidth: '1100px', margin: '0 auto' }}>
+      <div style={{ padding: '1.5rem clamp(0.75rem, 5vw, 2cm)', maxWidth: 'none', margin: 0 }}>
+        <style>{CSS_GRADE}</style>
         <DetalheEvento
           evento={eventoAtivo}
           onVoltar={() => { setEventoAtivo(null); carregarEventos(); }}
@@ -1992,7 +2048,8 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
   }
 
   return (
-    <div style={{ padding: '1.5rem', maxWidth: '1100px', margin: '0 auto' }}>
+    <div style={{ padding: '1.5rem clamp(0.75rem, 5vw, 2cm)', maxWidth: 'none', margin: 0 }}>
+      <style>{CSS_GRADE}</style>
 
       {/* Cabeçalho */}
       <div style={{ ...card, marginBottom: '1.25rem' }}>
@@ -2032,13 +2089,13 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
         if (rs.length === 0) return null;
         const soma = (k) => rs.reduce((acc, r) => acc + (r[k] || 0), 0);
         return (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem', marginBottom: '0.9rem' }}>
+          <GradeIndicadores n={5} style={{ marginBottom: '0.9rem' }}>
             <Indicador rotulo="Eventos" valor={eventosFiltrados.length} sub={filtroAno === 'todos' ? 'todos os anos' : `ano ${filtroAno}`} />
             <Indicador rotulo="Total gasto" valor={fmtR(soma('totalDespesas'))} sub="despesas dos eventos" cor="#ef4444" />
             <Indicador rotulo="Custeado pelos irmãos" valor={fmtR(soma('cobradoIrmaos'))} sub="família + convidados deles" cor="#10b981" />
             <Indicador rotulo="A cargo da Loja" valor={fmtR(soma('lojaTotal'))} sub="visitantes, descontos e contribuição" cor="#6366f1" />
             <Indicador rotulo="Recebido dos irmãos" valor={fmtR(soma('recebido'))} sub={`pendente ${fmtR(soma('pendente'))}`} cor="#3b82f6" />
-          </div>
+          </GradeIndicadores>
         );
       })()}
 
@@ -2103,7 +2160,7 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
                       </div>
 
                       {/* Valores */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.55rem' }}>
+                      <GradeIndicadores n={r.custeioAtivo ? 7 : 6}>
                         <Indicador rotulo="Valor total do evento"
                           valor={r.totalDespesas > 0 ? fmtR(r.totalDespesas) : '—'}
                           sub={r.totalDespesas > 0 ? `${r.totalCotas.toFixed(1)} cotas` : 'sem despesas lançadas'} />
@@ -2116,7 +2173,7 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
                         {r.custeioAtivo && <Indicador rotulo="Custeadores" valor={fmtR(r.custeioPool)} sub="famílias dos irmãos" cor="#8b5cf6" />}
                         <Indicador rotulo="A cargo da Loja" valor={fmtR(r.lojaTotal)}
                           sub={`visitantes${r.custeioAtivo ? ' + descontos' : ''}${r.contribuicaoLoja > 0 ? ' + contribuição' : ''}`} cor="#6366f1" />
-                      </div>
+                      </GradeIndicadores>
 
                       {/* Recebimento */}
                       {r.cobradoIrmaos > 0 && (
