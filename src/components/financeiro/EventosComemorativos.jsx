@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
-import { calcularRateio, custeioAtivo, descricaoComCusteio, cotasConvidados, semCobranca } from './utils/rateioCusteio';
+import { calcularRateio, custeioAtivo, descricaoComCusteio, cotasConvidados, semCobranca, resumirEvento } from './utils/rateioCusteio';
 
 // ─────────────────────────────────────────────
 //  Helpers
@@ -1757,6 +1757,34 @@ const DetalheEvento = ({ evento: eventoInit, onVoltar, irmaos, showSuccess, show
 // ─────────────────────────────────────────────
 //  Componente Principal
 // ─────────────────────────────────────────────
+// Busca todas as linhas, em blocos de 1000 (limite do Supabase)
+const paginarTodos = async (montar) => {
+  let todos = [];
+  let de = 0;
+  while (true) {
+    const { data, error } = await montar().range(de, de + 999);
+    if (error) throw error;
+    todos = todos.concat(data || []);
+    if (!data || data.length < 1000) break;
+    de += 1000;
+  }
+  return todos;
+};
+
+const Indicador = ({ rotulo, valor, sub, cor = 'var(--color-text)' }) => (
+  <div style={{ background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.55rem 0.7rem', minWidth: 0 }}>
+    <div style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{rotulo}</div>
+    <div style={{ fontSize: '1rem', fontWeight: 800, color: cor, marginTop: '0.1rem', overflowWrap: 'anywhere' }}>{valor}</div>
+    {sub && <div style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', marginTop: '0.1rem', lineHeight: 1.3 }}>{sub}</div>}
+  </div>
+);
+
+const ChipPessoas = ({ children }) => (
+  <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.74rem', fontWeight: 600, background: 'var(--color-surface-2)', color: 'var(--color-text)', border: '1px solid var(--color-border-light)' }}>
+    {children}
+  </span>
+);
+
 export default function EventosComemorativos({ showSuccess, showError, podeEditar = false }) {
   const [eventos, setEventos] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -1767,12 +1795,41 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
   const [filtroAno, setFiltroAno] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [confirmExcluir, setConfirmExcluir] = useState(null);
+  const [resumos, setResumos] = useState({});            // indicadores por evento (cartões da lista)
+  const [carregandoResumos, setCarregandoResumos] = useState(false);
+
+  // Participantes, despesas e cotas lançadas de todos os eventos, em lote
+  const carregarResumos = async (lista) => {
+    if (!lista || lista.length === 0) { setResumos({}); return; }
+    setCarregandoResumos(true);
+    try {
+      const ids = lista.map(e => e.id);
+      const [parts, lancs] = await Promise.all([
+        paginarTodos(() => supabase.from('evento_rateio_participantes').select('*').in('evento_id', ids).order('id')),
+        paginarTodos(() => supabase.from('lancamentos_loja')
+          .select('id,evento_comemorativo_id,origem_tipo,origem_irmao_id,tipo,valor,status')
+          .in('evento_comemorativo_id', ids).in('origem_tipo', ['Loja', 'Irmao']).order('id')),
+      ]);
+      const porPart = {}; const porLanc = {};
+      parts.forEach(x => { (porPart[x.evento_id] = porPart[x.evento_id] || []).push(x); });
+      lancs.forEach(x => { (porLanc[x.evento_comemorativo_id] = porLanc[x.evento_comemorativo_id] || []).push(x); });
+      const mapa = {};
+      lista.forEach(ev => { mapa[ev.id] = resumirEvento(ev, porPart[ev.id], porLanc[ev.id]); });
+      setResumos(mapa);
+    } catch (e) {
+      console.error('Erro ao calcular os indicadores dos eventos:', e);
+      setResumos({});
+    } finally {
+      setCarregandoResumos(false);
+    }
+  };
 
   const carregarEventos = async () => {
     setCarregando(true);
     const { data } = await supabase.from('eventos_comemorativos_fin').select('*').order('ano', { ascending: false }).order('data_evento', { ascending: false });
     setEventos(data || []);
     setCarregando(false);
+    carregarResumos(data || []);
   };
 
   const carregarIrmaos = async () => {
@@ -1830,7 +1887,7 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
       <div style={{ padding: '1.5rem', maxWidth: '1100px', margin: '0 auto' }}>
         <DetalheEvento
           evento={eventoAtivo}
-          onVoltar={() => setEventoAtivo(null)}
+          onVoltar={() => { setEventoAtivo(null); carregarEventos(); }}
           irmaos={irmaos}
           showSuccess={showSuccess}
           showError={showError}
@@ -1877,6 +1934,22 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
         </div>
       </div>
 
+      {/* Totais dos eventos filtrados */}
+      {!carregando && eventosFiltrados.length > 0 && (() => {
+        const rs = eventosFiltrados.map(e => resumos[e.id]).filter(Boolean);
+        if (rs.length === 0) return null;
+        const soma = (k) => rs.reduce((acc, r) => acc + (r[k] || 0), 0);
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.6rem', marginBottom: '0.9rem' }}>
+            <Indicador rotulo="Eventos" valor={eventosFiltrados.length} sub={filtroAno === 'todos' ? 'todos os anos' : `ano ${filtroAno}`} />
+            <Indicador rotulo="Total gasto" valor={fmtR(soma('totalDespesas'))} sub="despesas dos eventos" cor="#ef4444" />
+            <Indicador rotulo="Custeado pelos irmãos" valor={fmtR(soma('cobradoIrmaos'))} sub="família + convidados deles" cor="#10b981" />
+            <Indicador rotulo="A cargo da Loja" valor={fmtR(soma('lojaTotal'))} sub="visitantes, descontos e contribuição" cor="#6366f1" />
+            <Indicador rotulo="Recebido dos irmãos" valor={fmtR(soma('recebido'))} sub={`pendente ${fmtR(soma('pendente'))}`} cor="#3b82f6" />
+          </div>
+        );
+      })()}
+
       {/* Loading */}
       {carregando && <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-muted)' }}>Carregando eventos...</div>}
 
@@ -1908,7 +1981,6 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
                     </div>
                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.78rem', color: 'var(--color-text-muted)' }}>
                       {ev.data_evento && <span>📅 {fmtD(ev.data_evento)}</span>}
-                      {ev.valor_ajustado && <span>💰 Valor/cota: <strong style={{ color: 'var(--color-text)' }}>{fmtR(ev.valor_ajustado)}</strong></span>}
                       {ev.descricao && <span>📝 {ev.descricao}</span>}
                     </div>
                   </div>
@@ -1917,6 +1989,61 @@ export default function EventosComemorativos({ showSuccess, showError, podeEdita
                     {podeEditar && <button onClick={() => setConfirmExcluir(ev)} style={{ ...btnDanger, padding: '0.4rem 0.6rem' }}>🗑️</button>}
                   </div>
                 </div>
+
+                {(() => {
+                  const r = resumos[ev.id];
+                  if (!r) {
+                    return carregandoResumos
+                      ? <p style={{ margin: '0.75rem 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Calculando indicadores...</p>
+                      : null;
+                  }
+                  const totalPessoas = r.pessoasFamilia + r.pessoasConvIrmaos + r.pessoasExternos;
+                  const pctRec = r.cobradoIrmaos > 0 ? Math.min(100, (r.recebido / r.cobradoIrmaos) * 100) : 0;
+                  const pctPend = r.cobradoIrmaos > 0 ? Math.min(100 - pctRec, (r.pendente / r.cobradoIrmaos) * 100) : 0;
+                  return (
+                    <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+                      {/* Pessoas */}
+                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                        <ChipPessoas>👤 Total: <strong>{totalPessoas}</strong> pessoas</ChipPessoas>
+                        <ChipPessoas>👥 Família maçônica: <strong>{r.qtdIrmaos}</strong> irmãos · <strong>{r.pessoasFamilia}</strong> pessoas</ChipPessoas>
+                        <ChipPessoas>🎟️ Convidados dos irmãos: <strong>{r.pessoasConvIrmaos}</strong></ChipPessoas>
+                        <ChipPessoas>🌍 Visitantes/externos: <strong>{r.pessoasExternos}</strong></ChipPessoas>
+                      </div>
+
+                      {/* Valores */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.55rem' }}>
+                        <Indicador rotulo="Valor total do evento"
+                          valor={r.totalDespesas > 0 ? fmtR(r.totalDespesas) : '—'}
+                          sub={r.totalDespesas > 0 ? `${r.totalCotas.toFixed(1)} cotas` : 'sem despesas lançadas'} />
+                        <Indicador rotulo="Valor da cota"
+                          valor={r.valorCota > 0 ? fmtR(r.valorCota) : '—'}
+                          sub={r.valorCota > 0 ? (r.valorAjustado ? 'ajustado' : 'calculado pelas despesas') : '—'} />
+                        <Indicador rotulo="Custeado pelos irmãos" valor={fmtR(r.irmaosFamiliaValor)} sub="família dos irmãos" cor="#10b981" />
+                        <Indicador rotulo="Convidados dos irmãos" valor={fmtR(r.convIrmaosValor)} sub="pago pelo próprio irmão" cor="#f59e0b" />
+                        <Indicador rotulo="Visitantes/externos" valor={fmtR(r.externosValor)} sub="custeado pela Loja" cor="#6366f1" />
+                        {r.custeioAtivo && <Indicador rotulo="Custeadores" valor={fmtR(r.custeioPool)} sub="famílias dos irmãos" cor="#8b5cf6" />}
+                        <Indicador rotulo="A cargo da Loja" valor={fmtR(r.lojaTotal)}
+                          sub={`visitantes${r.custeioAtivo ? ' + descontos' : ''}${r.contribuicaoLoja > 0 ? ' + contribuição' : ''}`} cor="#6366f1" />
+                      </div>
+
+                      {/* Recebimento */}
+                      {r.cobradoIrmaos > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', height: '8px', borderRadius: '999px', overflow: 'hidden', background: 'var(--color-border)' }}>
+                            <div style={{ width: `${pctRec}%`, background: '#10b981' }} />
+                            <div style={{ width: `${pctPend}%`, background: '#f59e0b' }} />
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.9rem', flexWrap: 'wrap', marginTop: '0.4rem', fontSize: '0.74rem', color: 'var(--color-text-muted)' }}>
+                            <span>✅ Recebido <strong style={{ color: '#10b981' }}>{fmtR(r.recebido)}</strong> de {fmtR(r.cobradoIrmaos)} ({Math.round(pctRec)}%)</span>
+                            <span>⏳ Pendente <strong style={{ color: '#f59e0b' }}>{fmtR(r.pendente)}</strong></span>
+                            <span>📝 Falta lançar <strong style={{ color: 'var(--color-text)' }}>{fmtR(r.faltaLancar)}</strong></span>
+                            <span>{r.irmaosLancados}/{r.irmaosCobraveis} irmãos com cota lançada</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}
