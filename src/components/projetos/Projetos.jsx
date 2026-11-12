@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../supabaseClient';
 import { gerarRelatorioProjetosPDF } from '../../utils/gerarRelatorioProjetosPDF';
+import { gerarRelatorioProjetoDetalhadoPDF } from '../../utils/gerarRelatorioProjetoDetalhadoPDF';
 
 // Mesmas imagens decorativas já usadas no "Visualizar" do Cronograma —
 // reaproveita o mesmo bucket, sem subir nada novo.
@@ -134,6 +135,23 @@ export default function Projetos({ showSuccess, showError, permissoes }) {
     const anosReais = [...new Set(projetos.map(anoDoProjeto).filter(a => a !== 'Sem data'))].sort((a, b) => b.localeCompare(a));
     setAnoRelatorio(anosReais[0] || 'todos');
     setModalRelatorio(true);
+  };
+
+  // Relatório detalhado de UM projeto/campanha (movimentação financeira) — para apresentar aos irmãos.
+  const gerarRelatorioDetalhado = (projeto) => {
+    if (!permissoes?.canEdit) return; // relatório só para quem edita projetos
+    try {
+      gerarRelatorioProjetoDetalhadoPDF({
+        projeto,
+        tipoLabel: tiposProjeto.find(t => t.value === projeto.tipo)?.label || projeto.tipo,
+        statusLabel: statusLabels[projeto.status]?.label || projeto.status,
+        receitas: todasAsReceitas.filter(r => r.projeto_id === projeto.id),
+        custos: todosOsCustos.filter(c => c.projeto_id === projeto.id),
+        dadosLoja,
+      });
+    } catch (e) {
+      showError?.('Erro ao gerar relatório: ' + e.message);
+    }
   };
 
   const carregarProjetos = async () => {
@@ -675,6 +693,11 @@ export default function Projetos({ showSuccess, showError, permissoes }) {
                     </button>
                     {permissoes?.canEdit && (
                       <>
+                        <button onClick={() => gerarRelatorioDetalhado(projeto)}
+                          title="Relatório em PDF — movimentação detalhada"
+                          style={{padding:"0.25rem 0.55rem",background:"rgba(16,185,129,0.15)",color:"#10b981",border:"1px solid rgba(16,185,129,0.4)",borderRadius:"var(--radius-md)",fontSize:"0.82rem",cursor:"pointer"}}>
+                          📄
+                        </button>
                         <button onClick={() => editarProjeto(projeto)}
                           style={{padding:"0.25rem 0.55rem",background:"var(--color-accent-bg)",color:"var(--color-accent)",border:"1px solid var(--color-accent)",borderRadius:"var(--radius-md)",fontSize:"0.82rem",cursor:"pointer"}}>
                           ✏️
@@ -808,7 +831,16 @@ export default function Projetos({ showSuccess, showError, permissoes }) {
                   <h3 className="text-2xl font-bold text-white">📊 Financeiro do Projeto</h3>
                   <p className="text-sm mt-1" style={{color:"rgba(255,255,255,0.85)"}}>{projetoSelecionado.nome}</p>
                 </div>
-                <button onClick={fecharFinanceiro} className="text-white hover:opacity-80 text-4xl leading-none">×</button>
+                <div className="flex items-center gap-3">
+                  {permissoes?.canEdit && (
+                    <button onClick={() => gerarRelatorioDetalhado(projetoSelecionado)}
+                      title="Relatório em PDF — movimentação detalhada"
+                      style={{padding:"0.4rem 0.9rem",background:"rgba(255,255,255,0.18)",color:"#fff",border:"1px solid rgba(255,255,255,0.55)",borderRadius:"var(--radius-md)",fontSize:"0.85rem",fontWeight:700,cursor:"pointer"}}>
+                      📄 Relatório PDF
+                    </button>
+                  )}
+                  <button onClick={fecharFinanceiro} className="text-white hover:opacity-80 text-4xl leading-none">×</button>
+                </div>
               </div>
 
               {/* Abas */}
